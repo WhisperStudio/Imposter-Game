@@ -10,9 +10,10 @@ export default function Home() {
   const HandleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const formData = new FormData(e.currentTarget)
+    const formData = new FormData(e.currentTarget);
 
-    const numPlayers = formData.get("numPlayers")
+    const numPlayers = formData.get("numPlayers");
+    console.log(numPlayers);
   }
 
   return (
@@ -30,7 +31,7 @@ export default function Home() {
             </Section>
 
             <Section title="Number of Imposters">
-              <Counter DefaultValue={1} Name="numImposters" Min={1} Max={20} />
+              <Counter DefaultValue={1} Name="numImposters" Min={-2} Max={20} />
             </Section>
           </div>
 
