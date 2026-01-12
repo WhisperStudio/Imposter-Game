@@ -1,14 +1,19 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Lobby from "@/components/Lobby";
 import Themes from "@/components/Themes";
 import styled from 'styled-components';
 import { FaCog } from 'react-icons/fa';
 import { AstronautAvatar } from '@/components/avatar';
 import Image from 'next/image';
-import voteVImage from '/Vote_V.png';
-
+import type { Player } from "@/types/player";
+import {
+  createLobby,
+  joinLobby,
+  generatePlayerId,
+  listenToLobbyPlayers,
+} from "@/firebase/lobby";
 
 const PageContainer = styled.div`
   min-height: 100vh;
@@ -114,10 +119,11 @@ flex-direction: column;
 gap: 40px;
 justify-content: center;
 `;
-const Player = styled.div`
-postion: absoulte;
-dispay: grid;
-
+const PlayerWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  justify-content: center;
 `;
 
 const PlayerName = styled.div`
@@ -230,15 +236,10 @@ export default function Home() {
   const [showThemes, setShowThemes] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [isCopied, setIsCopied] = useState(false);
-
-  useEffect(() => {
-    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Excluding similar looking characters
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += characters.charAt(Math.floor(Math.random() * characters.length));
-    }
-    setInviteCode(code);
-  }, []);
+  const [myPlayer, setMyPlayer] = useState<Player | null>(null);
+  const [lobbyPlayers, setLobbyPlayers] = useState<Player[]>([]);
+  const [isHost, setIsHost] = useState(false);
+  const [currentLobbyCode, setCurrentLobbyCode] = useState('');
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(inviteCode);
@@ -246,18 +247,96 @@ export default function Home() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
+  const setupLobby = useCallback(async () => {
+    const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += characters[Math.floor(Math.random() * characters.length)];
+    }
+
+    setInviteCode(code);
+    setCurrentLobbyCode(code);
+    setIsHost(true);
+
+    const uid = crypto.randomUUID();
+    const player: Player = {
+      uid,
+      playerId: 100, // Host always has ID 100
+      name: `Player ${Math.floor(100 + Math.random() * 900)}`,
+      avatar: "astronaut",
+      joinedAt: Date.now(),
+    };
+
+    await createLobby(code, player);
+    setMyPlayer(player);
+  }, []);
+
+  useEffect(() => {
+    setupLobby();
+  }, [setupLobby]);
+
+  useEffect(() => {
+    if (!inviteCode) return;
+
+    const unsub = listenToLobbyPlayers(inviteCode, setLobbyPlayers);
+    return () => unsub();
+  }, [inviteCode]);
+
+  function getPerspectivePlayers(
+    players: Player[],
+    myUid: string
+  ) {
+    const index = players.findIndex(p => p.uid === myUid);
+    if (index === -1) return players;
+
+    return [
+      ...players.slice(index),
+      ...players.slice(0, index),
+    ];
+  }
+
+  const handleJoinGame = async (code: string) => {
+    if (!myPlayer) {
+      const uid = crypto.randomUUID();
+      const player: Player = {
+        uid,
+        playerId: 100 + lobbyPlayers.length,
+        name: `Player ${100 + lobbyPlayers.length}`,
+        avatar: "astronaut",
+        joinedAt: Date.now(),
+      };
+
+      await joinLobby(code, player);
+      setMyPlayer(player);
+      setCurrentLobbyCode(code);
+      setInviteCode(code);
+    }
+  };
+
+  const handleCreateGame = useCallback(async () => {
+    await setupLobby();
+  }, [setupLobby]);
+
+  const visiblePlayers =
+    myPlayer ? getPerspectivePlayers(lobbyPlayers, myPlayer.uid) : [];
+
   return (
     <>
       <StarryBackground />
       <PageContainer>
         <GlowEffect />
         <PlayerContainer>
-          <Bar>
-            <Player>
+           {visiblePlayers.map((player, i) => (
+          <Bar  key={player.uid}>
+            <PlayerWrapper>
               <AstronautAvatar size={100} />
-              <PlayerName>Player 101</PlayerName>
-            </Player>
+               <PlayerName>                 
+                {player.name}
+                {i === 0 && " (You)"}
+            </PlayerName>
+            </PlayerWrapper>
           </Bar>
+          ))}
           <Bar_2>
             <VoteBadge>
               <Image
@@ -290,7 +369,13 @@ export default function Home() {
           </InviteCode>
           <Title> Imposter Game</Title>
           <ViewContainer $isActive={!showThemes}>
-            <Lobby onStartGame={() => setShowThemes(true)} />
+            <Lobby 
+              onStartGame={() => setShowThemes(true)}
+              players={lobbyPlayers}
+              onJoinGame={handleJoinGame}
+              onCreateGame={handleCreateGame}
+              isHost={isHost}
+            />
           </ViewContainer>
 
           <ViewContainer $isActive={showThemes}>
