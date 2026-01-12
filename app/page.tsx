@@ -379,18 +379,6 @@ export default function Home() {
             </PlayerWrapper>
           </Bar>
 
-          {others.map((player) => (
-            <Bar key={player.uid}>
-              <PlayerWrapper>
-                <AstronautAvatar size={60} />
-                <PlayerName>
-                  {player.name}
-                  {player.playerId === 100 && " 👑"}
-                </PlayerName>
-              </PlayerWrapper>
-            </Bar>
-          ))}
-
           <Bar_2>
             <VoteBadge>
               <Image src="/Vote_V.png" alt="Vote V" width={50} height={50} priority />

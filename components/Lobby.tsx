@@ -24,6 +24,7 @@ const PlayersGrid = styled.div`
   gap: 2rem;
   width: 100%;
   margin: 1rem 0;
+  border-bottom: 2px solid #a5a5a5;
 `;
 
 const PlayerCard = styled.div`
@@ -32,16 +33,12 @@ const PlayerCard = styled.div`
   align-items: center;
   gap: 1rem;
   padding: 1.5rem;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   transition: all 0.3s ease;
   min-width: 180px;
   
   &:hover {
     transform: translateY(-5px);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    border-color: #4f46e5;
   }
 `;
 
