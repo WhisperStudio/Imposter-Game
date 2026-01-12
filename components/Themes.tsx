@@ -10,10 +10,7 @@ type ThemeCategory = {
 };
 
 // Styled Components
-const starTwinkle = keyframes`
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 1; }
-`;
+
 
 const gradientFlow = keyframes`
   0% { background-position: 0% 50%; }
@@ -21,29 +18,8 @@ const gradientFlow = keyframes`
   100% { background-position: 0% 50%; }
 `;
 
-const StarBackground = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-  background: linear-gradient(to bottom, #0f172a, #1e293b);
-  overflow: hidden;
-`;
 
-const Star = styled.div<{ $top: string; $left: string; $delay: string }>`
-  position: absolute;
-  background: white;
-  border-radius: 50%;
-  opacity: 0;
-  animation: ${starTwinkle} ${({ $delay }) => $delay} infinite ease-in-out;
-  top: ${({ $top }) => $top};
-  left: ${({ $left }) => $left};
-  width: 2px;
-  height: 2px;
-  box-shadow: 0 0 5px 1px white;
-`;
+
 
 const GlowingBorder = styled.div`
   position: relative;
@@ -292,33 +268,6 @@ transition: opacity 0.2s;
 }
 `;
 
-const StarryBackground = () => {
-  const [stars, setStars] = useState<Array<{ id: number, top: string, left: string, delay: string }>>([]);
-
-  useEffect(() => {
-    // Generate stars only on client side
-    const starsArray = Array(100).fill(0).map((_, i) => ({
-      id: i,
-      top: `${Math.random() * 100}%`,
-      left: `${Math.random() * 100}%`,
-      delay: `${Math.random() * 3 + 2}s`
-    }));
-    setStars(starsArray);
-  }, []);
-
-  return (
-    <StarBackground>
-      {stars.map(star => (
-        <Star
-          key={star.id}
-          $top={star.top}
-          $left={star.left}
-          $delay={star.delay}
-        />
-      ))}
-    </StarBackground>
-  );
-};
 
 interface ThemesProps {
   onBack: () => void;
@@ -461,7 +410,6 @@ export default function Themes({ onBack }: ThemesProps) {
 
   return (
     <>
-      <StarryBackground />
 
       <ThemesContainer>
         <BackButton onClick={onBack}>
