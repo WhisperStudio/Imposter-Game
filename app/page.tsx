@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Lobby from "@/components/Lobby";
 import Themes from "@/components/Themes";
 import styled from "styled-components";
-import { FaCog } from "react-icons/fa";
+import { FaCog, FaTimes } from "react-icons/fa";
 import { AstronautAvatar } from "@/components/avatar";
+import SettingsPanel from "@/components/settings";
 import Image from "next/image";
 import type { Player } from "@/types/player";
 import { createLobby, joinLobby, listenToLobbyPlayers } from "@/firebase/lobby";
@@ -40,10 +41,7 @@ const PageContainer = styled.div`
 
 const StarBackground = styled.div`
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0;
   background: linear-gradient(135deg, #0f172a, #1e293b);
   z-index: 1;
   overflow: hidden;
@@ -60,6 +58,7 @@ const Star = styled.div<{ $top: string; $left: string; $delay: string }>`
   animation: twinkle 3s infinite;
   animation-delay: ${({ $delay }) => $delay};
   opacity: 0.7;
+
   @keyframes twinkle {
     0%,
     100% {
@@ -118,7 +117,7 @@ const PlayerContainer = styled.div`
   padding: 1rem;
 `;
 
-const Bar = styled.div<{ $isCurrentUser?: boolean }>`
+const Bar = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -147,7 +146,6 @@ const PlayerName = styled.div`
 
 const VoteBadge = styled.div`
   z-index: 10;
-
   img {
     width: 60px;
     height: 60px;
@@ -155,7 +153,8 @@ const VoteBadge = styled.div`
   }
 `;
 
-const Settings = styled.div`
+/* 🔥 rename to avoid conflict with SettingsPanel import */
+const SettingsButton = styled.button`
   display: flex;
   width: 60px;
   height: 60px;
@@ -218,13 +217,59 @@ const ViewContainer = styled.div<{ $isActive: boolean }>`
   position: ${({ $isActive }) => ($isActive ? "relative" : "absolute")};
   opacity: ${({ $isActive }) => ($isActive ? 1 : 0)};
   pointer-events: ${({ $isActive }) => ($isActive ? "auto" : "none")};
-  transform: ${({ $isActive }) => ($isActive ? "translateY(0)" : "translateY(20px)")};
+  transform: ${({ $isActive }) =>
+    $isActive ? "translateY(0)" : "translateY(20px)"};
+`;
+
+/* -------- modal -------- */
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+`;
+
+const ModalCard = styled.div`
+  width: min(980px, 95vw);
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.5);
+  position: relative;
+`;
+
+const CloseBtn = styled.button`
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(30, 41, 59, 0.65);
+  color: #e2e8f0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(30, 41, 59, 0.9);
+  }
 `;
 
 /* ---------------- background component ---------------- */
 
 const StarryBackground = () => {
-  const [stars, setStars] = useState<Array<{ id: number; top: string; left: string; delay: string }>>([]);
+  const [stars, setStars] = useState<
+    Array<{ id: number; top: string; left: string; delay: string }>
+  >([]);
 
   useEffect(() => {
     const starsArray = Array(100)
@@ -241,7 +286,12 @@ const StarryBackground = () => {
   return (
     <StarBackground>
       {stars.map((star) => (
-        <Star key={star.id} $top={star.top} $left={star.left} $delay={star.delay} />
+        <Star
+          key={star.id}
+          $top={star.top}
+          $left={star.left}
+          $delay={star.delay}
+        />
       ))}
     </StarBackground>
   );
@@ -250,6 +300,8 @@ const StarryBackground = () => {
 /* ---------------- page ---------------- */
 
 export default function Home() {
+  const uid = useMemo(() => getOrCreateUid(), []);
+
   const [showThemes, setShowThemes] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [isCopied, setIsCopied] = useState(false);
@@ -258,9 +310,9 @@ export default function Home() {
   const [lobbyPlayers, setLobbyPlayers] = useState<Player[]>([]);
 
   const [isHost, setIsHost] = useState(false);
-  const [currentLobbyCode, setCurrentLobbyCode] = useState("");
-
   const [isCreating, setIsCreating] = useState(false);
+
+  const [showSettings, setShowSettings] = useState(false);
 
   const copyToClipboard = () => {
     if (!inviteCode) return;
@@ -271,8 +323,6 @@ export default function Home() {
 
   const setupLobby = useCallback(
     async (isNewGame = false, codeToJoin?: string) => {
-      const uid = getOrCreateUid();
-
       // Reuse local player if already created
       let player = myPlayer;
       if (!player) {
@@ -290,34 +340,29 @@ export default function Home() {
         const host: Player = { ...player, playerId: 100, joinedAt: Date.now() };
 
         const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        const code = Array.from({ length: 6 }, () => characters[Math.floor(Math.random() * characters.length)]).join("");
+        const code = Array.from({ length: 6 }, () =>
+          characters[Math.floor(Math.random() * characters.length)]
+        ).join("");
 
         await createLobby(code, host);
 
         setMyPlayer(host);
         setInviteCode(code);
-        setCurrentLobbyCode(code);
         setIsHost(true);
-
-        return { code, player: host };
+        return;
       }
 
       if (codeToJoin) {
-  const joiner: Player = { ...player, playerId: 0, joinedAt: Date.now() };
-  await joinLobby(codeToJoin, joiner);
+        const joiner: Player = { ...player, playerId: 0, joinedAt: Date.now() };
+        await joinLobby(codeToJoin, joiner);
 
-  setMyPlayer(joiner);
-  setInviteCode(codeToJoin);
-  setCurrentLobbyCode(codeToJoin);
-  setIsHost(false);
-
-  return { code: codeToJoin, player: joiner };
-}
-
-
-      return { code: "", player };
+        setMyPlayer(joiner);
+        setInviteCode(codeToJoin);
+        setIsHost(false);
+        return;
+      }
     },
-    [myPlayer, lobbyPlayers.length]
+    [uid, myPlayer]
   );
 
   const handleCreateGame = useCallback(async () => {
@@ -359,22 +404,20 @@ export default function Home() {
     ? [...uniquePlayers.filter((p) => p.uid === myUid), ...uniquePlayers.filter((p) => p.uid !== myUid)]
     : uniquePlayers;
 
-  const others = orderedPlayers.filter((p) => p.uid !== myUid);
-
   return (
     <>
       <StarryBackground />
+
       <PageContainer>
         <GlowEffect />
 
-        {/* Top-right player container: ALWAYS show "my slot" */}
         <PlayerContainer>
-          <Bar $isCurrentUser>
+          <Bar>
             <PlayerWrapper>
               <AstronautAvatar size={100} />
               <PlayerName>
-                {myPlayer ? `${myPlayer.name} (You)` : "You (not in lobby)"}
-                {myPlayer?.playerId === 100}
+                {myPlayer ? `${myPlayer.name} (You)` : "You (not in lobby)"}{" "}
+                {myPlayer?.playerId === 100 ? "👑" : ""}
               </PlayerName>
             </PlayerWrapper>
           </Bar>
@@ -383,9 +426,11 @@ export default function Home() {
             <VoteBadge>
               <Image src="/Vote_V.png" alt="Vote V" width={50} height={50} priority />
             </VoteBadge>
-            <Settings>
+
+            {/* ✅ This is the button. It does NOT take uid. */}
+            <SettingsButton onClick={() => setShowSettings(true)} aria-label="Open settings">
               <FaCog />
-            </Settings>
+            </SettingsButton>
           </Bar_2>
         </PlayerContainer>
 
@@ -395,14 +440,7 @@ export default function Home() {
             <CodeDisplay onClick={copyToClipboard} title="Click to copy">
               {inviteCode || "Not created yet"}
               {isCopied && (
-                <span
-                  style={{
-                    marginLeft: "0.5rem",
-                    fontSize: "0.8rem",
-                    color: "#4ade80",
-                    transition: "opacity 0.3s ease",
-                  }}
-                >
+                <span style={{ marginLeft: "0.5rem", fontSize: "0.8rem", color: "#4ade80" }}>
                   Copied!
                 </span>
               )}
@@ -426,6 +464,20 @@ export default function Home() {
           </ViewContainer>
         </MainContainer>
       </PageContainer>
+
+      {/* ✅ Settings Modal */}
+      {showSettings && (
+        <ModalOverlay onClick={() => setShowSettings(false)}>
+          <ModalCard onClick={(e) => e.stopPropagation()}>
+            <CloseBtn onClick={() => setShowSettings(false)} aria-label="Close settings">
+              <FaTimes />
+            </CloseBtn>
+
+            {/* ✅ This is where uid is used */}
+            <SettingsPanel uid={uid} />
+          </ModalCard>
+        </ModalOverlay>
+      )}
     </>
   );
 }
