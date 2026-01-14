@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Lobby from "@/components/Lobby";
-import Themes from "@/components/Themes";
+import Themes, { WORD_DATA } from "@/components/Themes"; 
+import Game from "@/components/Game";
 import styled from "styled-components";
 import { FaCog, FaTimes } from "react-icons/fa";
 import { AstronautAvatar } from "@/components/avatar";
 import SettingsPanel from "@/components/settings";
 import Image from "next/image";
 import type { Player } from "@/types/player";
-import { createLobby, joinLobby, listenToLobbyPlayers } from "@/firebase/lobby";
+import { createLobby, joinLobby, listenToLobby, listenToLobbyPlayers, startGame } from "@/firebase/lobby";
+import { useTheme } from "@/components/ThemeContext";
 
 /* ---------------- helpers ---------------- */
 
@@ -23,288 +25,19 @@ function getOrCreateUid() {
   return uid;
 }
 
-/* ---------------- styled ---------------- */
-
-const PageContainer = styled.div`
-  min-height: 100vh;
-  width: 100vw;
-  max-width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  position: relative;
-  z-index: 2;
-  box-sizing: border-box;
-  overflow: hidden;
-`;
-
-const StarBackground = styled.div`
-  position: fixed;
-  inset: 0;
-  background: linear-gradient(135deg, #0f172a, #1e293b);
-  z-index: 1;
-  overflow: hidden;
-`;
-
-const Star = styled.div<{ $top: string; $left: string; $delay: string }>`
-  position: absolute;
-  top: ${({ $top }) => $top};
-  left: ${({ $left }) => $left};
-  width: 2px;
-  height: 2px;
-  background: white;
-  border-radius: 50%;
-  animation: twinkle 3s infinite;
-  animation-delay: ${({ $delay }) => $delay};
-  opacity: 0.7;
-
-  @keyframes twinkle {
-    0%,
-    100% {
-      opacity: 0.2;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-`;
-
-const Title = styled.h1`
-  font-size: 3.5rem;
-  font-weight: 700;
-  margin-bottom: 2rem;
-  margin-left: 35%;
-  background: linear-gradient(45deg, #3b82f6, #8b5cf6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-`;
-
-const GlowEffect = styled.div`
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    circle at 50% 50%,
-    rgba(99, 102, 241, 0.1) 0%,
-    rgba(16, 24, 39, 0) 70%
-  );
-  pointer-events: none;
-  z-index: 1;
-`;
-
-const MainContainer = styled.main`
-  width: 100%;
-  max-width: 1200px;
-  position: relative;
-  z-index: 2;
-  overflow: visible;
-`;
-
-const PlayerContainer = styled.div`
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
-  width: 300px;
-  height: 200px;
-  gap: 3rem;
-  background: #1e293b;
-  border: 1px white solid;
-  border-radius: 0 0 0 60px;
-  position: absolute;
-  top: -4px;
-  right: -1px;
-  padding: 1rem;
-`;
-
-const Bar = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-`;
-
-const Bar_2 = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 40px;
-  justify-content: center;
-`;
-
-const PlayerWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  border-radius: 12px;
-  min-width: 120px;
-`;
-
-const PlayerName = styled.div`
-  color: #94a3b8;
-`;
-
-const VoteBadge = styled.div`
-  z-index: 10;
-  img {
-    width: 60px;
-    height: 60px;
-    object-fit: contain;
-  }
-`;
-
-/* 🔥 rename to avoid conflict with SettingsPanel import */
-const SettingsButton = styled.button`
-  display: flex;
-  width: 60px;
-  height: 60px;
-  border: 2px solid #4f46e5;
-  border-radius: 50%;
-  align-items: center;
-  justify-content: center;
-  background: #1e293b;
-  color: #e5e7eb;
-  font-size: 1.5rem;
-  transition: all 0.2s ease;
-  cursor: pointer;
-
-  &:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
-  }
-`;
-
-const InviteCode = styled.div`
-  position: absolute;
-  margin-top: 1rem;
-  text-align: center;
-  color: #e5e7eb;
-`;
-
-const CodeDisplay = styled.div`
-  display: inline-flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-family: monospace;
-  font-size: 1.25rem;
-  letter-spacing: 0.2em;
-  margin-top: 0.5rem;
-  border: 1px solid #4f46e5;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background: rgba(79, 70, 229, 0.2);
-    transform: translateY(-2px);
-  }
-
-  &:active {
-    transform: translateY(0);
-  }
-`;
-
-const CodeLabel = styled.div`
-  font-size: 0.875rem;
-  color: #94a3b8;
-  margin-bottom: 0.25rem;
-`;
-
-const ViewContainer = styled.div<{ $isActive: boolean }>`
-  width: 100%;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  position: ${({ $isActive }) => ($isActive ? "relative" : "absolute")};
-  opacity: ${({ $isActive }) => ($isActive ? 1 : 0)};
-  pointer-events: ${({ $isActive }) => ($isActive ? "auto" : "none")};
-  transform: ${({ $isActive }) =>
-    $isActive ? "translateY(0)" : "translateY(20px)"};
-`;
-
-/* -------- modal -------- */
-
-const ModalOverlay = styled.div`
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(2, 6, 23, 0.72);
-  backdrop-filter: blur(6px);
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-`;
-
-const ModalCard = styled.div`
-  width: min(980px, 95vw);
-  max-height: 90vh;
-  overflow: auto;
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.5);
-  position: relative;
-`;
-
-const CloseBtn = styled.button`
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(30, 41, 59, 0.65);
-  color: #e2e8f0;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-
-  &:hover {
-    background: rgba(30, 41, 59, 0.9);
-  }
-`;
-
-/* ---------------- background component ---------------- */
-
-const StarryBackground = () => {
-  const [stars, setStars] = useState<
-    Array<{ id: number; top: string; left: string; delay: string }>
-  >([]);
-
-  useEffect(() => {
-    const starsArray = Array(100)
-      .fill(0)
-      .map((_, i) => ({
-        id: i,
-        top: `${Math.random() * 100}%`,
-        left: `${Math.random() * 100}%`,
-        delay: `${Math.random() * 3}s`,
-      }));
-    setStars(starsArray);
-  }, []);
-
-  return (
-    <StarBackground>
-      {stars.map((star) => (
-        <Star
-          key={star.id}
-          $top={star.top}
-          $left={star.left}
-          $delay={star.delay}
-        />
-      ))}
-    </StarBackground>
-  );
-};
-
 /* ---------------- page ---------------- */
 
 export default function Home() {
   const uid = useMemo(() => getOrCreateUid(), []);
 
+  // Henter valgte temaer fra Context
+  const { selectedThemes } = useTheme();
+
   const [showThemes, setShowThemes] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [isCopied, setIsCopied] = useState(false);
+
+  const [lobby, setLobby] = useState<any | null>(null);
 
   const [myPlayer, setMyPlayer] = useState<Player | null>(null);
   const [lobbyPlayers, setLobbyPlayers] = useState<Player[]>([]);
@@ -323,7 +56,6 @@ export default function Home() {
 
   const setupLobby = useCallback(
     async (isNewGame = false, codeToJoin?: string) => {
-      // Reuse local player if already created
       let player = myPlayer;
       if (!player) {
         player = {
@@ -338,7 +70,6 @@ export default function Home() {
 
       if (isNewGame) {
         const host: Player = { ...player, playerId: 100, joinedAt: Date.now() };
-
         const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         const code = Array.from({ length: 6 }, () =>
           characters[Math.floor(Math.random() * characters.length)]
@@ -381,6 +112,8 @@ export default function Home() {
       setIsCreating(true);
       try {
         await setupLobby(false, code);
+      } catch (err) {
+        console.error(err);
       } finally {
         setIsCreating(false);
       }
@@ -394,15 +127,57 @@ export default function Home() {
     return () => unsub();
   }, [inviteCode]);
 
-  // ---- dedupe + ordering (prevents duplicate "me") ----
-  const myUid = myPlayer?.uid;
+  useEffect(() => {
+    if (!inviteCode) return;
+    const unsub = listenToLobby(inviteCode, setLobby);
+    return () => unsub();
+  }, [inviteCode]);
 
+  const myUid = myPlayer?.uid;
   const mergedPlayers = [...(myPlayer ? [myPlayer] : []), ...lobbyPlayers] as Player[];
   const uniquePlayers = Array.from(new Map(mergedPlayers.map((p) => [p.uid, p])).values());
-
   const orderedPlayers = myUid
     ? [...uniquePlayers.filter((p) => p.uid === myUid), ...uniquePlayers.filter((p) => p.uid !== myUid)]
     : uniquePlayers;
+
+  const isStarted = lobby?.status === "started";
+
+  // ------------------------------------------------------------------
+  // ✅ LOGIKKEN SOM FIKSER PLAY-KNAPPEN
+  // ------------------------------------------------------------------
+  const handleStartGame = useCallback(async () => {
+    if (!inviteCode) return;
+    if (!myPlayer) return;
+
+    // 1. Hent hvilke kategorier (temaer) brukeren har valgt
+    const categories = Array.from(selectedThemes);
+
+    if (categories.length === 0) {
+      alert("Please select at least one theme!");
+      return;
+    }
+
+    // 2. Velg en tilfeldig kategori (Dette blir HINTET til imposteren)
+    // F.eks: "Forest" eller "Pizza"
+    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+
+    // 3. Finn ordlisten for denne kategorien
+    const wordsInCategory = WORD_DATA[randomCategory];
+
+    if (!wordsInCategory || wordsInCategory.length === 0) {
+      console.error("Fant ingen ord for kategori:", randomCategory);
+      alert("Something went wrong finding words for " + randomCategory);
+      return;
+    }
+
+    // 4. Velg et tilfeldig ord fra listen (Dette er ordet Crewmates ser)
+    const randomWord = wordsInCategory[Math.floor(Math.random() * wordsInCategory.length)];
+
+    // 5. Start spillet (Sender 4 argumenter: code, uid, word, hint)
+    // Her sender vi 'randomCategory' som hintet.
+    await startGame(inviteCode, myPlayer.uid, randomWord, randomCategory);
+    
+  }, [inviteCode, myPlayer, selectedThemes]);
 
   return (
     <>
@@ -427,7 +202,6 @@ export default function Home() {
               <Image src="/Vote_V.png" alt="Vote V" width={50} height={50} priority />
             </VoteBadge>
 
-            {/* ✅ This is the button. It does NOT take uid. */}
             <SettingsButton onClick={() => setShowSettings(true)} aria-label="Open settings">
               <FaCog />
             </SettingsButton>
@@ -449,31 +223,39 @@ export default function Home() {
 
           <Title>Imposter Game</Title>
 
-          <ViewContainer $isActive={!showThemes}>
-            <Lobby
-              onStartGame={() => setShowThemes(true)}
-              players={orderedPlayers}
-              onJoinGame={handleJoinGame}
-              onCreateGame={handleCreateGame}
-              isHost={isHost}
-            />
-          </ViewContainer>
+          {isStarted ? (
+            <Game players={orderedPlayers} myUid={uid} game={lobby?.game} />
+          ) : (
+            <>
+              <ViewContainer $isActive={!showThemes}>
+                <Lobby
+                  onStartGame={() => setShowThemes(true)}
+                  players={orderedPlayers}
+                  onJoinGame={handleJoinGame}
+                  onCreateGame={handleCreateGame}
+                  isHost={isHost}
+                />
+              </ViewContainer>
 
-          <ViewContainer $isActive={showThemes}>
-            <Themes onBack={() => setShowThemes(false)} />
-          </ViewContainer>
+              <ViewContainer $isActive={showThemes}>
+                <Themes
+                  onBack={() => setShowThemes(false)}
+                  isHost={isHost}
+                  canStartGame={selectedThemes.size > 0}
+                  onStartGame={handleStartGame}
+                />
+              </ViewContainer>
+            </>
+          )}
         </MainContainer>
       </PageContainer>
 
-      {/* ✅ Settings Modal */}
       {showSettings && (
         <ModalOverlay onClick={() => setShowSettings(false)}>
-          <ModalCard onClick={(e) => e.stopPropagation()}>
+          <ModalCard onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
             <CloseBtn onClick={() => setShowSettings(false)} aria-label="Close settings">
               <FaTimes />
             </CloseBtn>
-
-            {/* ✅ This is where uid is used */}
             <SettingsPanel uid={uid} />
           </ModalCard>
         </ModalOverlay>
@@ -481,3 +263,269 @@ export default function Home() {
     </>
   );
 }
+
+/* ---------------- styled components ---------------- */
+
+const PageContainer = styled.div`
+  min-height: 100vh;
+  width: 100vw;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+  overflow: hidden;
+`;
+
+const StarBackground = styled.div`
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  z-index: 1;
+  overflow: hidden;
+`;
+
+const Star = styled.div<{ $top: string; $left: string; $delay: string }>`
+  position: absolute;
+  top: ${({ $top }) => $top};
+  left: ${({ $left }) => $left};
+  width: 2px;
+  height: 2px;
+  background: white;
+  border-radius: 50%;
+  animation: twinkle 3s infinite;
+  animation-delay: ${({ $delay }) => $delay};
+  opacity: 0.7;
+
+  @keyframes twinkle {
+    0%,
+    100% { opacity: 0.2; }
+    50% { opacity: 1; }
+  }
+`;
+
+const Title = styled.h1`
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+  text-align: center;
+  background: linear-gradient(45deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+`;
+
+const GlowEffect = styled.div`
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(99, 102, 241, 0.1) 0%,
+    rgba(16, 24, 39, 0) 70%
+  );
+  pointer-events: none;
+  z-index: 1;
+`;
+
+const MainContainer = styled.main`
+  width: 100%;
+  max-width: 1200px;
+  position: relative;
+  z-index: 2;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+const PlayerContainer = styled.div`
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  width: 300px;
+  height: 200px;
+  gap: 3rem;
+  background: #1e293b;
+  border: 1px white solid;
+  border-radius: 0 0 0 60px;
+  position: absolute;
+  top: -4px;
+  right: -1px;
+  padding: 1rem;
+  z-index: 10;
+`;
+
+const Bar = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+`;
+
+const Bar_2 = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  justify-content: center;
+`;
+
+const PlayerWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 12px;
+  min-width: 120px;
+`;
+
+const PlayerName = styled.div`
+  color: #94a3b8;
+`;
+
+const VoteBadge = styled.div`
+  z-index: 10;
+  img {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+  }
+`;
+
+const SettingsButton = styled.button`
+  display: flex;
+  width: 60px;
+  height: 60px;
+  border: 2px solid #4f46e5;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  background: #1e293b;
+  color: #e5e7eb;
+  font-size: 1.5rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+
+  &:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+  }
+`;
+
+const InviteCode = styled.div`
+  margin-bottom: 2rem;
+  text-align: center;
+  color: #e5e7eb;
+`;
+
+const CodeDisplay = styled.div`
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-family: monospace;
+  font-size: 1.25rem;
+  letter-spacing: 0.2em;
+  margin-top: 0.5rem;
+  border: 1px solid #4f46e5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(79, 70, 229, 0.2);
+    transform: translateY(-2px);
+  }
+`;
+
+const CodeLabel = styled.div`
+  font-size: 0.875rem;
+  color: #94a3b8;
+  margin-bottom: 0.25rem;
+`;
+
+const ViewContainer = styled.div<{ $isActive: boolean }>`
+  width: 100%;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  position: ${({ $isActive }) => ($isActive ? "relative" : "absolute")};
+  opacity: ${({ $isActive }) => ($isActive ? 1 : 0)};
+  pointer-events: ${({ $isActive }) => ($isActive ? "auto" : "none")};
+  transform: ${({ $isActive }) =>
+    $isActive ? "translateY(0)" : "translateY(20px)"};
+`;
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+`;
+
+const ModalCard = styled.div`
+  width: min(980px, 95vw);
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.5);
+  position: relative;
+`;
+
+const CloseBtn = styled.button`
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(30, 41, 59, 0.65);
+  color: #e2e8f0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(30, 41, 59, 0.9);
+  }
+`;
+
+/* ---------------- background logic ---------------- */
+
+const StarryBackground = () => {
+  const [stars, setStars] = useState<
+    Array<{ id: number; top: string; left: string; delay: string }>
+  >([]);
+
+  useEffect(() => {
+    const starsArray = Array(100)
+      .fill(0)
+      .map((_, i) => ({
+        id: i,
+        top: `${Math.random() * 100}%`,
+        left: `${Math.random() * 100}%`,
+        delay: `${Math.random() * 3}s`,
+      }));
+    setStars(starsArray);
+  }, []);
+
+  return (
+    <StarBackground>
+      {stars.map((star) => (
+        <Star
+          key={star.id}
+          $top={star.top}
+          $left={star.left}
+          $delay={star.delay}
+        />
+      ))}
+    </StarBackground>
+  );
+};
