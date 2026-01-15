@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import Lobby from "@/components/Lobby";
-import Themes, { WORD_DATA } from "@/components/Themes"; 
-import Game from "@/components/Game";
 import styled from "styled-components";
 import Image from "next/image";
 import { FaCog, FaTimes } from "react-icons/fa";
 
 import Lobby from "@/components/Lobby";
-import Themes from "@/components/Themes";
+import Themes, { WORD_DATA } from "@/components/Themes";
+import Game from "@/components/Game";
 import SettingsPanel from "@/components/settings";
 
 import { AstronautAvatar } from "@/components/avatars/AstronautAvatar";
@@ -17,14 +15,10 @@ import { RedAstronautAvatar } from "@/components/avatars/RedAstronautAvatar";
 
 import type { Player } from "@/types/player";
 import { createLobby, joinLobby, listenToLobby, listenToLobbyPlayers, startGame } from "@/firebase/lobby";
+
 import { useTheme } from "@/components/ThemeContext";
 
-import {
-  readSkin,
-  readType,
-  type AvatarSkin,
-  type AvatarType,
-} from "@/firebase/avatarPrefs";
+import { readSkin, readType, type AvatarSkin, type AvatarType } from "@/firebase/avatarPrefs";
 
 /* ---------------- helpers ---------------- */
 
@@ -41,9 +35,7 @@ function getOrCreateUid() {
 /* ---------------- background component ---------------- */
 
 const StarryBackground = () => {
-  const [stars, setStars] = useState<
-    Array<{ id: number; top: string; left: string; delay: string }>
-  >([]);
+  const [stars, setStars] = useState<Array<{ id: number; top: string; left: string; delay: string }>>([]);
 
   useEffect(() => {
     const starsArray = Array(100)
@@ -60,12 +52,7 @@ const StarryBackground = () => {
   return (
     <StarBackground>
       {stars.map((star) => (
-        <Star
-          key={star.id}
-          $top={star.top}
-          $left={star.left}
-          $delay={star.delay}
-        />
+        <Star key={star.id} $top={star.top} $left={star.left} $delay={star.delay} />
       ))}
     </StarBackground>
   );
@@ -75,9 +62,7 @@ const StarryBackground = () => {
 
 export default function Home() {
   const uid = useMemo(() => getOrCreateUid(), []);
-
-  // Henter valgte temaer fra Context
-  const { selectedThemes } = useTheme();
+  const { selectedThemeId } = useTheme();
 
   const [showThemes, setShowThemes] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
@@ -93,37 +78,25 @@ export default function Home() {
 
   const [showSettings, setShowSettings] = useState(false);
 
-  // ✅ prefs (type + skin)
+  // prefs
   const [avatarType, setAvatarType] = useState<AvatarType>("classicAstronaut");
   const [skin, setSkin] = useState<AvatarSkin>("classic");
 
-  // ✅ init prefs
   useEffect(() => {
     setAvatarType(readType(uid));
     setSkin(readSkin(uid));
   }, [uid]);
 
-  // ✅ live-update when SettingsPanel changes prefs
   useEffect(() => {
     const onPrefs = () => {
       setAvatarType(readType(uid));
       setSkin(readSkin(uid));
     };
-
     window.addEventListener("imposter:avatarPrefs", onPrefs);
     return () => window.removeEventListener("imposter:avatarPrefs", onPrefs);
   }, [uid]);
 
-  const handleAvatarTypeChange = useCallback((newType: AvatarType) => {
-    setAvatarType(newType);
-  }, []);
-
-  const handleSkinChange = useCallback((newSkin: AvatarSkin) => {
-    setSkin(newSkin);
-  }, []);
-
-  const AvatarComponent =
-    avatarType === "redAstronaut" ? RedAstronautAvatar : AstronautAvatar;
+  const AvatarComponent = avatarType === "redAstronaut" ? RedAstronautAvatar : AstronautAvatar;
 
   const copyToClipboard = () => {
     if (!inviteCode) return;
@@ -150,9 +123,7 @@ export default function Home() {
         const host: Player = { ...player, playerId: 100, joinedAt: Date.now() };
 
         const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        const code = Array.from({ length: 6 }, () =>
-          characters[Math.floor(Math.random() * characters.length)]
-        ).join("");
+        const code = Array.from({ length: 6 }, () => characters[Math.floor(Math.random() * characters.length)]).join("");
 
         await createLobby(code, host);
 
@@ -200,75 +171,52 @@ export default function Home() {
     [setupLobby, isCreating]
   );
 
+  // listen players
   useEffect(() => {
     if (!inviteCode) return;
     const unsub = listenToLobbyPlayers(inviteCode, setLobbyPlayers);
     return () => unsub();
   }, [inviteCode]);
 
+  // listen lobby
   useEffect(() => {
     if (!inviteCode) return;
     const unsub = listenToLobby(inviteCode, setLobby);
     return () => unsub();
   }, [inviteCode]);
 
+  // merge + dedupe players
   const myUid = myPlayer?.uid;
   const mergedPlayers = [...(myPlayer ? [myPlayer] : []), ...lobbyPlayers] as Player[];
   const uniquePlayers = Array.from(new Map(mergedPlayers.map((p) => [p.uid, p])).values());
+
   const orderedPlayers = myUid
     ? [...uniquePlayers.filter((p) => p.uid === myUid), ...uniquePlayers.filter((p) => p.uid !== myUid)]
     : uniquePlayers;
 
   const isStarted = lobby?.status === "started";
+  const gameData = lobby?.game;
 
-  // ------------------------------------------------------------------
-  // ✅ LOGIKKEN SOM FIKSER PLAY-KNAPPEN
-  // ------------------------------------------------------------------
+  // ✅ start game: bruker temaet som ligger i lobby.settings
   const handleStartGame = useCallback(async () => {
-    if (!inviteCode) return;
-    if (!myPlayer) return;
+    if (!inviteCode || !myPlayer) return;
 
-    // 1. Hent hvilke kategorier (temaer) brukeren har valgt
-    const categories = Array.from(selectedThemes);
+    const themeId: string | null = lobby?.settings?.selectedThemeId ?? null;
 
-    if (categories.length === 0) {
-      alert("Please select at least one theme!");
+    if (!themeId) {
+      alert("Host must select a theme first!");
       return;
     }
 
-    // 2. Velg en tilfeldig kategori (Dette blir HINTET til imposteren)
-    // F.eks: "Forest" eller "Pizza"
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-
-    // 3. Finn ordlisten for denne kategorien
-    const wordsInCategory = WORD_DATA[randomCategory];
-
-    if (!wordsInCategory || wordsInCategory.length === 0) {
-      console.error("Fant ingen ord for kategori:", randomCategory);
-      alert("Something went wrong finding words for " + randomCategory);
+    const words = WORD_DATA[themeId];
+    if (!words?.length) {
+      alert("No words found for theme: " + themeId);
       return;
     }
 
-    // 4. Velg et tilfeldig ord fra listen (Dette er ordet Crewmates ser)
-    const randomWord = wordsInCategory[Math.floor(Math.random() * wordsInCategory.length)];
-
-    // 5. Start spillet (Sender 4 argumenter: code, uid, word, hint)
-    // Her sender vi 'randomCategory' som hintet.
-    await startGame(inviteCode, myPlayer.uid, randomWord, randomCategory);
-    
-  }, [inviteCode, myPlayer, selectedThemes]);
-
-  // ---- dedupe + ordering (prevents duplicate "me") ----
-  const myUid = myPlayer?.uid;
-  const mergedPlayers = [...(myPlayer ? [myPlayer] : []), ...lobbyPlayers] as Player[];
-  const uniquePlayers = Array.from(new Map(mergedPlayers.map((p) => [p.uid, p])).values());
-
-  const orderedPlayers = myUid
-    ? [
-        ...uniquePlayers.filter((p) => p.uid === myUid),
-        ...uniquePlayers.filter((p) => p.uid !== myUid),
-      ]
-    : uniquePlayers;
+    const randomWord = words[Math.floor(Math.random() * words.length)];
+    await startGame(inviteCode, myPlayer.uid, randomWord, themeId);
+  }, [inviteCode, myPlayer, lobby]);
 
   return (
     <>
@@ -286,8 +234,7 @@ export default function Home() {
               </SkinScope>
 
               <PlayerName>
-                {myPlayer ? `${myPlayer.name} (You)` : "You (not in lobby)"}{" "}
-                {myPlayer?.playerId === 100 ? "👑" : ""}
+                {myPlayer ? `${myPlayer.name} (You)` : "You (not in lobby)"} {myPlayer?.playerId === 100 ? "👑" : ""}
               </PlayerName>
             </PlayerWrapper>
           </Bar>
@@ -308,32 +255,39 @@ export default function Home() {
             <CodeLabel>Invite Code</CodeLabel>
             <CodeDisplay onClick={copyToClipboard} title="Click to copy">
               {inviteCode || "Not created yet"}
-              {isCopied && (
-                <span style={{ marginLeft: "0.5rem", fontSize: "0.8rem", color: "#4ade80" }}>
-                  Copied!
-                </span>
-              )}
+              {isCopied && <span style={{ marginLeft: "0.5rem", fontSize: "0.8rem", color: "#4ade80" }}>Copied!</span>}
             </CodeDisplay>
           </InviteCode>
 
           <Title>Imposter Game</Title>
 
-          <ViewContainer $isActive={!showThemes}>
-            <Lobby
-              onStartGame={() => setShowThemes(true)}
-              players={orderedPlayers}
-              onJoinGame={handleJoinGame}
-              onCreateGame={handleCreateGame}
-              isHost={isHost}
-              // (valgfritt) hvis du vil bruke skin/type inni Lobby også:
-              // avatarType={avatarType}
-              // skin={skin}
-            />
-          </ViewContainer>
+          {/* ✅ game view */}
+          {isStarted ? (
+            <Game players={orderedPlayers} myUid={uid} game={gameData} />
+          ) : (
+            <>
+              <ViewContainer $isActive={!showThemes}>
+                <Lobby
+                  onStartGame={() => setShowThemes(true)}
+                  players={orderedPlayers}
+                  onJoinGame={handleJoinGame}
+                  onCreateGame={handleCreateGame}
+                  isHost={isHost}
+                />
+              </ViewContainer>
 
-          <ViewContainer $isActive={showThemes}>
-            <Themes onBack={() => setShowThemes(false)} />
-          </ViewContainer>
+              <ViewContainer $isActive={showThemes}>
+                <Themes
+                  onBack={() => setShowThemes(false)}
+                  onStartGame={handleStartGame}
+                  isHost={isHost}
+                  canStartGame={!!lobby?.settings?.selectedThemeId}
+                  inviteCode={inviteCode}
+                  hostUid={myPlayer?.uid ?? ""}
+                />
+              </ViewContainer>
+            </>
+          )}
         </MainContainer>
       </PageContainer>
 
@@ -349,8 +303,8 @@ export default function Home() {
               uid={uid}
               initialAvatarType={avatarType}
               initialSkin={skin}
-              onAvatarTypeChange={handleAvatarTypeChange}
-              onSkinChange={handleSkinChange}
+              onAvatarTypeChange={(t) => setAvatarType(t)}
+              onSkinChange={(s) => setSkin(s)}
             />
           </ModalCard>
         </ModalOverlay>
@@ -397,8 +351,12 @@ const Star = styled.div<{ $top: string; $left: string; $delay: string }>`
 
   @keyframes twinkle {
     0%,
-    100% { opacity: 0.2; }
-    50% { opacity: 1; }
+    100% {
+      opacity: 0.2;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 `;
 
@@ -416,11 +374,7 @@ const Title = styled.h1`
 const GlowEffect = styled.div`
   position: absolute;
   inset: 0;
-  background: radial-gradient(
-    circle at 50% 50%,
-    rgba(99, 102, 241, 0.1) 0%,
-    rgba(16, 24, 39, 0) 70%
-  );
+  background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, rgba(16, 24, 39, 0) 70%);
   pointer-events: none;
   z-index: 1;
 `;
@@ -591,20 +545,16 @@ const CloseBtn = styled.button`
   }
 `;
 
-/* ---------------- SkinScope (same as SettingsPanel) ---------------- */
-
 const SkinScope = styled.div`
   --hue: 0deg;
   --sat: 1;
   --bright: 1;
   --contrast: 1;
-
   display: grid;
   place-items: center;
 
   & > * {
-    filter: hue-rotate(var(--hue)) saturate(var(--sat)) brightness(var(--bright))
-      contrast(var(--contrast));
+    filter: hue-rotate(var(--hue)) saturate(var(--sat)) brightness(var(--bright)) contrast(var(--contrast));
   }
 
   &[data-skin="classic"] {
@@ -613,28 +563,24 @@ const SkinScope = styled.div`
     --bright: 1;
     --contrast: 1.02;
   }
-
   &[data-skin="midnight"] {
     --hue: 210deg;
     --sat: 1.25;
     --bright: 0.92;
     --contrast: 1.15;
   }
-
   &[data-skin="mint"] {
     --hue: 135deg;
     --sat: 1.15;
     --bright: 1.05;
     --contrast: 1.05;
   }
-
   &[data-skin="sunset"] {
     --hue: 320deg;
     --sat: 1.25;
     --bright: 1.03;
     --contrast: 1.08;
   }
-
   &[data-skin="cyber"] {
     --hue: 260deg;
     --sat: 1.45;

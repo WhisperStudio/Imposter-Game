@@ -9,9 +9,7 @@ import { AstronautAvatar } from "./avatars/AstronautAvatar";
 import { RedAstronautAvatar } from "./avatars/RedAstronautAvatar";
 
 import {
-  readSkin,
   readType,
-  type AvatarSkin,
   type AvatarType,
 } from "@/firebase/avatarPrefs";
 

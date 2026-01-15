@@ -68,14 +68,37 @@ export function listenToLobby(inviteCode: string, callback: (lobby: DocumentData
   });
 }
 
-/* -------- START GAME (UPDATED FOR CATEGORY HINT) -------- */
+export async function setLobbyTheme(inviteCode: string, hostUid: string, themeId: string) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
 
-export async function startGame(inviteCode: string, hostUid: string, word: string, hint: string) {
+  await runTransaction(db, async (tx: Transaction) => {
+    const snap = await tx.get(lobbyRef);
+    if (!snap.exists()) throw new Error("Lobby does not exist");
+
+    const data = snap.data() as any;
+    if (data.hostId !== hostUid) throw new Error("Only host can set theme");
+    if (data.status !== "waiting") throw new Error("Game already started");
+
+    tx.set(
+      lobbyRef,
+      {
+        settings: {
+          selectedThemeId: themeId,
+        },
+      },
+      { merge: true }
+    );
+  });
+}
+
+
+/* -------- START GAME (UPDATED FOR CATEGORY HINT) -------- */
+export async function startGame(inviteCode: string, hostUid: string, word: string, themeId: string) {
   const lobbyRef = doc(db, "lobbies", inviteCode);
 
   const playersSnap = await getDocs(collection(db, "lobbies", inviteCode, "players"));
   const playerUids = playersSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => d.id);
-  
+
   if (playerUids.length < 1) {
     throw new Error("No players in lobby");
   }
@@ -110,16 +133,19 @@ export async function startGame(inviteCode: string, hostUid: string, word: strin
         status: "started",
         game: {
           startedAt: serverTimestamp(),
-          word: word,         // The specific word chosen by frontend
-          imposterUid: imposterUid,
-          imposterHint: hint, // The category name passed from frontend
-          assignments: assignments,
+          themeId, // ✅ lagrer temaet vi brukte
+          word,    // ✅ ordet alle crew får
+          imposterUid,
+          imposterHint: "Blend in. Do your best.", // kan endres senere
+          assignments,
+          phase: "reveal",
         },
       },
       { merge: true }
     );
   });
 }
+
 
 /* -------- JOIN (SAFE PLAYER ID) -------- */
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { useTheme } from "./ThemeContext";
+import { setLobbyTheme } from "@/firebase/lobby";
 import PlayButton from "./PlayButton";
 
 /* ---------------- DATA: ORDBANK (Lagt til for å fikse build error) ---------------- */
@@ -350,63 +351,64 @@ interface ThemesProps {
   onStartGame: () => void;
   isHost: boolean;
   canStartGame: boolean;
+  inviteCode: string;
+  hostUid: string;
 }
-
-export default function Themes({ onBack, onStartGame, isHost, canStartGame }: ThemesProps) {
-  // ✅ Henter selectedThemes fra context slik at page.tsx får tilgang til valgene
-  const { selectedThemes, toggleTheme: toggleCtxTheme } = useTheme();
+export default function Themes({
+  onBack,
+  onStartGame,
+  isHost,
+  canStartGame,
+  inviteCode,
+  hostUid,
+}: ThemesProps) {
+  const { selectedThemeId, setTheme } = useTheme();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
-  // Definerer kategoriene for UI-et
+  // UI-kategorier kan du beholde som før
   const themeCategories = [
     {
-      id: 'nature',
-      name: 'Nature',
-      items: ['Forest', 'Mountains', 'Beach', 'Desert', 'Jungle', 'Arctic']
+      id: "nature",
+      name: "Nature",
+      items: ["Forest", "Mountains", "Beach", "Desert", "Jungle", "Arctic"],
     },
     {
-      id: 'animals',
-      name: 'Animals',
-      items: ['Mammals', 'Birds', 'Reptiles', 'Amphibians', 'Fish', 'Insects']
+      id: "animals",
+      name: "Animals",
+      items: ["Mammals", "Birds", "Reptiles", "Amphibians", "Fish", "Insects"],
     },
     {
-      id: 'food',
-      name: 'Food & Drink',
-      items: ['Fruits', 'Vegetables', 'Desserts', 'Beverages', 'Snacks', 'Meals']
+      id: "food",
+      name: "Food & Drink",
+      items: ["Fruits", "Vegetables", "Desserts", "Beverages", "Snacks", "Meals"],
     },
     {
-      id: 'careers',
-      name: 'Careers',
-      items: ['Doctor', 'Engineer', 'Teacher', 'Artist', 'Scientist', 'Chef']
+      id: "careers",
+      name: "Careers",
+      items: ["Doctor", "Engineer", "Teacher", "Artist", "Scientist", "Chef"],
     },
     {
-      id: 'technology',
-      name: 'Technology',
-      items: ['Gadgets', 'AI', 'Programming', 'Robotics', 'Space Tech', 'VR/AR']
+      id: "technology",
+      name: "Technology",
+      items: ["Gadgets", "AI", "Programming", "Robotics", "Space Tech", "VR/AR"],
     },
     {
-      id: 'sports',
-      name: 'Sports',
-      items: ['Soccer', 'Basketball', 'Tennis', 'Swimming', 'Athletics', 'Cycling']
+      id: "sports",
+      name: "Sports",
+      items: ["Soccer", "Basketball", "Tennis", "Swimming", "Athletics", "Cycling"],
     },
   ];
 
-  const featuredThemes = [
-    'Animals',
-    'Planets',
-    'Movies',
-    'Video Games',
-    'Landscapes'
-  ];
+  const featuredThemes = ["Animals", "Planets", "Movies", "Video Games", "Landscapes"];
+
+  // ✅ valider at UI kun viser tema som finnes i WORD_DATA
+  const isValidTheme = (t: string) => Array.isArray(WORD_DATA[t]);
 
   const toggleCategory = (categoryId: string) => {
-    setExpandedCategories(prev => {
+    setExpandedCategories((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(categoryId)) {
-        newSet.delete(categoryId);
-      } else {
-        setExpandedCategories(new Set([categoryId]));
-      }
+      if (newSet.has(categoryId)) newSet.delete(categoryId);
+      else newSet.clear(), newSet.add(categoryId);
       return newSet;
     });
   };
@@ -420,9 +422,9 @@ export default function Themes({ onBack, onStartGame, isHost, canStartGame }: Th
       const randomThemeId = featuredThemeIds[Math.floor(Math.random() * featuredThemeIds.length)];
       const delay = Math.random() * 8000 + 2000;
       setTimeout(() => {
-        setGlareStates(prev => ({ ...prev, [randomThemeId]: !prev[randomThemeId] }));
+        setGlareStates((prev) => ({ ...prev, [randomThemeId]: !prev[randomThemeId] }));
         setTimeout(() => {
-          setGlareStates(prev => ({ ...prev, [randomThemeId]: !prev[randomThemeId] }));
+          setGlareStates((prev) => ({ ...prev, [randomThemeId]: !prev[randomThemeId] }));
         }, 1000);
         startRandomGlare();
       }, delay);
@@ -435,37 +437,45 @@ export default function Themes({ onBack, onStartGame, isHost, canStartGame }: Th
     setDelays(Array(4).fill(0).map(() => Math.random() * 1000));
   }, []);
 
-  const handleToggle = (theme: string) => {
-    if(!isHost) return;
-    toggleCtxTheme(theme);
+  const handleSelectTheme = async (themeId: string) => {
+    if (!isHost) return;
+    if (!inviteCode || !hostUid) return;
+    if (!isValidTheme(themeId)) return;
+
+    // ✅ lokal UI
+    setTheme(themeId);
+
+    // ✅ lagre til Firestore så alle syncer
+    await setLobbyTheme(inviteCode, hostUid, themeId);
   };
 
   return (
-    <>
-      <ThemesContainer>
-        <BackButton onClick={onBack}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M19 12H5M12 19l-7-7 7-7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Back to Lobby
-        </BackButton>
-        <ThemesHeader>Game Themes</ThemesHeader>
-        <GlowingBorder>
-          <FeaturedThemes>
-            <FeaturedTitle>Featured Themes</FeaturedTitle>
-            <FeaturedThemesGrid>
-              {featuredThemes.slice(0, 4).map((theme, index) => (
+    <ThemesContainer>
+      <BackButton onClick={onBack}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M19 12H5M12 19l-7-7 7-7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Back to Lobby
+      </BackButton>
+
+      <ThemesHeader>Game Themes</ThemesHeader>
+
+      <GlowingBorder>
+        <FeaturedThemes>
+          <FeaturedTitle>Featured Themes</FeaturedTitle>
+          <FeaturedThemesGrid>
+            {featuredThemes
+              .filter(isValidTheme)
+              .slice(0, 4)
+              .map((theme, index) => (
                 <ThemeButton
                   key={theme}
-                  $isSelected={selectedThemes.has(theme)}
-                  onClick={() => handleToggle(theme)}
-                  style={{ opacity: isHost ? 1 : 0.7, cursor: isHost ? 'pointer' : 'default' }}
+                  $isSelected={selectedThemeId === theme}
+                  onClick={() => handleSelectTheme(theme)}
+                  style={{ opacity: isHost ? 1 : 0.7, cursor: isHost ? "pointer" : "default" }}
                 >
-                  <GlareEffect 
-                    $show={glareStates[`featured-${index}`] || false}
-                    $delay={delays[index] || 0}
-                  />
-                  <Checkbox $isSelected={selectedThemes.has(theme)}>
+                  <GlareEffect $show={glareStates[`featured-${index}`] || false} $delay={delays[index] || 0} />
+                  <Checkbox $isSelected={selectedThemeId === theme}>
                     <svg viewBox="0 0 10 8" fill="none" stroke="currentColor">
                       <path d="M9 1L3.5 6.5L1 4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -473,69 +483,66 @@ export default function Themes({ onBack, onStartGame, isHost, canStartGame }: Th
                   {theme}
                 </ThemeButton>
               ))}
-            </FeaturedThemesGrid>
-          </FeaturedThemes>
-        </GlowingBorder>
-        <CategoriesRow>
-          {themeCategories.map(category => {
-            const isExpanded = expandedCategories.has(category.id);
-            return (
-              <CategoryCard key={category.id} $isExpanded={isExpanded}>
-                <CategoryHeader onClick={() => toggleCategory(category.id)} $isExpanded={isExpanded}>
-                  {category.name}
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    style={{
-                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)',
-                      transition: 'transform 0.2s'
-                    }}
-                  >
-                    <path d="M19 9l-7 7-7-7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </CategoryHeader>
+          </FeaturedThemesGrid>
+        </FeaturedThemes>
+      </GlowingBorder>
 
-                {isExpanded && (
-                  <CategoryContent>
-                    {category.items.map(item => {
-                      const isSelected = selectedThemes.has(item);
-                      return (
-                        <ThemeButton
-                          key={item}
-                          $isSelected={isSelected}
-                          onClick={() => handleToggle(item)}
-                          style={{ opacity: isHost ? 1 : 0.7, cursor: isHost ? 'pointer' : 'default' }}
-                        >
-                          <Checkbox $isSelected={isSelected}>
-                            <svg viewBox="0 0 10 8" fill="none" stroke="currentColor">
-                              <path d="M9 1L3.5 6.5L1 4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </Checkbox>
-                          {item}
-                        </ThemeButton>
-                      );
-                    })}
-                  </CategoryContent>
-                )}
-              </CategoryCard>
-            );
-          })}
-        </CategoriesRow>
+      <CategoriesRow>
+        {themeCategories.map((category) => {
+          const isExpanded = expandedCategories.has(category.id);
+          return (
+            <CategoryCard key={category.id} $isExpanded={isExpanded}>
+              <CategoryHeader onClick={() => toggleCategory(category.id)} $isExpanded={isExpanded}>
+                {category.name}
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  style={{
+                    transform: isExpanded ? "rotate(180deg)" : "rotate(0)",
+                    transition: "transform 0.2s",
+                  }}
+                >
+                  <path d="M19 9l-7 7-7-7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </CategoryHeader>
 
-        <Footer>
-            {!isHost ? (
-                <WaitingText>Waiting for host to choose themes...</WaitingText>
-            ) : (
-                <PlayButton 
-                    onClick={onStartGame} 
-                    disabled={!canStartGame} 
-                />
-            )}
-        </Footer>
-      </ThemesContainer>
-    </>
+              {isExpanded && (
+                <CategoryContent>
+                  {category.items.filter(isValidTheme).map((item) => {
+                    const isSelected = selectedThemeId === item;
+                    return (
+                      <ThemeButton
+                        key={item}
+                        $isSelected={isSelected}
+                        onClick={() => handleSelectTheme(item)}
+                        style={{ opacity: isHost ? 1 : 0.7, cursor: isHost ? "pointer" : "default" }}
+                      >
+                        <Checkbox $isSelected={isSelected}>
+                          <svg viewBox="0 0 10 8" fill="none" stroke="currentColor">
+                            <path d="M9 1L3.5 6.5L1 4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </Checkbox>
+                        {item}
+                      </ThemeButton>
+                    );
+                  })}
+                </CategoryContent>
+              )}
+            </CategoryCard>
+          );
+        })}
+      </CategoriesRow>
+
+      <Footer>
+        {!isHost ? (
+          <WaitingText>Waiting for host to choose a theme...</WaitingText>
+        ) : (
+          <PlayButton onClick={onStartGame} disabled={!canStartGame} />
+        )}
+      </Footer>
+    </ThemesContainer>
   );
 }
