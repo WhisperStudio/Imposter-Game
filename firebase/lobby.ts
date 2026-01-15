@@ -8,7 +8,11 @@ import {
   runTransaction,
   serverTimestamp,
   getDocs,
+  Timestamp,
+  deleteDoc,
+  deleteField,
 } from "firebase/firestore";
+
 import type {
   DocumentData,
   DocumentSnapshot,
@@ -30,19 +34,21 @@ import type { Player } from "@/types/player";
 export async function createLobby(inviteCode: string, host: Player) {
   const lobbyRef = doc(db, "lobbies", inviteCode);
 
-  // Create lobby if it doesn't exist
+  // ✅ TTL: 10 timer fra nå
+  const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 60 * 1000);
+
   await setDoc(
     lobbyRef,
     {
       createdAt: serverTimestamp(),
       status: "waiting",
       hostId: host.uid,
-      nextPlayerNumber: 101, // next joiner becomes 101, 102, ...
+      nextPlayerNumber: 101,
+      expiresAt, // ✅ TTL field
     },
     { merge: true }
   );
 
-  // Ensure host is stored as player 100
   await setDoc(
     doc(db, "lobbies", inviteCode, "players", host.uid),
     {
@@ -54,6 +60,7 @@ export async function createLobby(inviteCode: string, host: Player) {
     { merge: true }
   );
 }
+
 
 export function listenToLobby(inviteCode: string, callback: (lobby: DocumentData | null) => void) {
   const lobbyRef = doc(db, "lobbies", inviteCode);
@@ -93,14 +100,19 @@ export async function setLobbyTheme(inviteCode: string, hostUid: string, themeId
 
 
 /* -------- START GAME (UPDATED FOR CATEGORY HINT) -------- */
-export async function startGame(inviteCode: string, hostUid: string, word: string, themeId: string) {
+export async function startGame(
+  inviteCode: string,
+  hostUid: string,
+  word: string,
+  themeId: string,
+  imposterHint: string // ✅ NYTT
+) {
   const lobbyRef = doc(db, "lobbies", inviteCode);
 
-  // ✅ hent players i deterministisk rekkefølge (joinedAt)
+  // deterministisk rekkefølge
   const playersQ = query(collection(db, "lobbies", inviteCode, "players"), orderBy("joinedAt", "asc"));
   const playersSnap = await getDocs(playersQ);
-
-  const playerUids = playersSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => d.id);
+  const playerUids = playersSnap.docs.map((d) => d.id);
 
   if (playerUids.length < 2) {
     throw new Error("Need at least 2 players to start");
@@ -131,13 +143,11 @@ export async function startGame(inviteCode: string, hostUid: string, word: strin
           themeId,
           word,
           imposterUid,
-          imposterHint: "Blend in. Do your best.",
+          imposterHint, // ✅ lagrer hintet vi sender inn
           assignments,
 
-          // ✅ flow
           phase: "reveal",
 
-          // ✅ turn-system
           playerOrder: playerUids,
           chat: {
             round: 1,
@@ -353,37 +363,36 @@ export async function submitVote(inviteCode: string, voterUid: string, targetUid
     if (!playerOrder.includes(targetUid)) throw new Error("Invalid vote target");
 
     const votes: Record<string, string> = game.votes ?? {};
-
     if (votes[voterUid]) throw new Error("You already voted");
 
     const nextVotes = { ...votes, [voterUid]: targetUid };
 
-    // if not all voted yet, just save
+    // Ikke alle har stemt enda
     if (Object.keys(nextVotes).length < n) {
       tx.set(lobbyRef, { game: { votes: nextVotes } }, { merge: true });
       return;
     }
 
-    // ✅ tally votes
+    // ✅ tell stemmer
     const tally: Record<string, number> = {};
     for (const v of Object.values(nextVotes)) {
       tally[v] = (tally[v] ?? 0) + 1;
     }
 
-    // find max vote count
+    // finn max
     let max = -1;
     for (const uid of Object.keys(tally)) {
       if (tally[uid] > max) max = tally[uid];
     }
 
+    // tie-break deterministisk
     const top = Object.keys(tally).filter((uid) => tally[uid] === max);
-
-    // deterministic tie-break: lexicographically smallest uid
     top.sort();
     const eliminatedUid = top[0];
 
     const imposterUid: string = game.imposterUid;
     const winner: "crew" | "imposter" = eliminatedUid === imposterUid ? "crew" : "imposter";
+    const loser: "crew" | "imposter" = winner === "crew" ? "imposter" : "crew"; // ✅ NYTT
 
     tx.set(
       lobbyRef,
@@ -393,6 +402,7 @@ export async function submitVote(inviteCode: string, voterUid: string, targetUid
           phase: "result",
           result: {
             winner,
+            loser,        // ✅ NYTT
             eliminatedUid,
           },
         },
@@ -402,6 +412,101 @@ export async function submitVote(inviteCode: string, voterUid: string, targetUid
     );
   });
 }
+
+export async function resetGame(inviteCode: string, hostUid: string) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(lobbyRef);
+    if (!snap.exists()) throw new Error("Lobby does not exist");
+
+    const data = snap.data() as any;
+    if (data.hostId !== hostUid) throw new Error("Only host can reset");
+
+    tx.set(
+      lobbyRef,
+      {
+        status: "waiting",
+        game: deleteField(),
+        // behold tema-valget (valgfritt)
+        // settings: { selectedThemeId: null },
+      },
+      { merge: true }
+    );
+  });
+}
+
+
+export async function closeLobby(inviteCode: string, hostUid: string) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(lobbyRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data() as any;
+    if (data.hostId !== hostUid) return; // kun host kan close
+
+    // ✅ sett expiresAt til "nå" så TTL fjerner den så fort som mulig
+    tx.set(
+      lobbyRef,
+      {
+        status: "closed",
+        closedAt: serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now()),
+      },
+      { merge: true }
+    );
+  });
+}
+export async function leaveLobby(inviteCode: string, uid: string) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+  const playerRef = doc(db, "lobbies", inviteCode, "players", uid);
+
+  // fjern spilleren fra lobbyen
+  await deleteDoc(playerRef);
+
+  // hvis lobbyen ikke finnes, stopp
+  const snapPlayers = await getDocs(collection(db, "lobbies", inviteCode, "players"));
+  const remaining = snapPlayers.size;
+
+  // hvis ingen spillere igjen -> close lobby (TTL rydder opp)
+  if (remaining === 0) {
+    await setDoc(
+      lobbyRef,
+      {
+        status: "closed",
+        closedAt: serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now()),
+      },
+      { merge: true }
+    );
+    return;
+  }
+
+  // hvis host forsvinner, close lobby (så folk sendes ut)
+  // (du kan endre dette til “transfer host” senere)
+  // vi må sjekke hostId:
+  // (vi leser lobby doc – enkelt)
+  // NB: Ikke transaction her – good enough
+  // Hvis du vil helt safe, si fra.
+  // eslint-disable-next-line
+  const lobbySnap = await (await import("firebase/firestore")).getDoc(lobbyRef);
+  const lobbyData = lobbySnap.exists() ? (lobbySnap.data() as any) : null;
+
+  if (lobbyData?.hostId === uid) {
+    await setDoc(
+      lobbyRef,
+      {
+        status: "closed",
+        closedAt: serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now()),
+      },
+      { merge: true }
+    );
+  }
+}
+
 
 
 

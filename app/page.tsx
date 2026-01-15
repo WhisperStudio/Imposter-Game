@@ -14,7 +14,8 @@ import { AstronautAvatar } from "@/components/avatars/AstronautAvatar";
 import { RedAstronautAvatar } from "@/components/avatars/RedAstronautAvatar";
 
 import type { Player } from "@/types/player";
-import { createLobby, joinLobby, listenToLobby, listenToLobbyPlayers, startGame } from "@/firebase/lobby";
+import { createLobby, joinLobby, listenToLobby, listenToLobbyPlayers, startGame, leaveLobby, closeLobby } from "@/firebase/lobby";
+
 
 import { useTheme } from "@/components/ThemeContext";
 
@@ -77,6 +78,24 @@ export default function Home() {
   const [isCreating, setIsCreating] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+
+  const handleExitLobby = useCallback(async () => {
+  if (!inviteCode || !myPlayer) return;
+
+  try {
+    await leaveLobby(inviteCode, myPlayer.uid);
+  } catch (e) {
+    console.error(e);
+  } finally {
+    // reset state tilbake til startmeny
+    setShowThemes(false);
+    setInviteCode("");
+    setLobby(null);
+    setLobbyPlayers([]);
+    setIsHost(false);
+  }
+}, [inviteCode, myPlayer]);
+
 
   // prefs
   const [avatarType, setAvatarType] = useState<AvatarType>("classicAstronaut");
@@ -146,15 +165,27 @@ export default function Home() {
     [uid, myPlayer]
   );
 
-  const handleCreateGame = useCallback(async () => {
-    if (isCreating) return;
-    setIsCreating(true);
-    try {
-      await setupLobby(true);
-    } finally {
-      setIsCreating(false);
+ const handleCreateGame = useCallback(async () => {
+  if (isCreating) return;
+  setIsCreating(true);
+
+  try {
+    // ✅ close previous lobby from this browser (TTL will delete)
+    const last = typeof window !== "undefined" ? localStorage.getItem("imposter_last_lobby") : null;
+    if (last && myPlayer?.uid) {
+      await closeLobby(last, myPlayer.uid).catch(() => {});
     }
-  }, [setupLobby, isCreating]);
+
+    await setupLobby(true);
+
+    // ✅ store current lobby code as last
+    // (setupLobby(true) setter inviteCode via setInviteCode, men vi har ikke den direkte her.
+    // Vi lagrer i en effect under når inviteCode endres.)
+  } finally {
+    setIsCreating(false);
+  }
+}, [setupLobby, isCreating, myPlayer]);
+
 
   const handleJoinGame = useCallback(
     async (code: string) => {
@@ -180,10 +211,40 @@ export default function Home() {
 
   // listen lobby
   useEffect(() => {
-    if (!inviteCode) return;
-    const unsub = listenToLobby(inviteCode, setLobby);
-    return () => unsub();
-  }, [inviteCode]);
+  if (!inviteCode) return;
+
+  const unsub = listenToLobby(inviteCode, (l) => {
+    // hvis lobby-dokumentet er slettet
+    if (!l) {
+      setShowThemes(false);
+      setInviteCode("");
+      setLobby(null);
+      setLobbyPlayers([]);
+      setIsHost(false);
+      return;
+    }
+
+    // hvis lobby er closed
+    if (l.status === "closed") {
+      setShowThemes(false);
+      setInviteCode("");
+      setLobby(null);
+      setLobbyPlayers([]);
+      setIsHost(false);
+      return;
+    }
+
+    setLobby(l);
+  });
+
+  return () => unsub();
+}, [inviteCode]);
+
+  useEffect(() => {
+  if (!inviteCode) return;
+  localStorage.setItem("imposter_last_lobby", inviteCode);
+}, [inviteCode]);
+
 
   // merge + dedupe players
   const myUid = myPlayer?.uid;
@@ -194,29 +255,46 @@ export default function Home() {
     ? [...uniquePlayers.filter((p) => p.uid === myUid), ...uniquePlayers.filter((p) => p.uid !== myUid)]
     : uniquePlayers;
 
-  const isStarted = lobby?.status === "started";
+  const isInGame = lobby?.status === "started" || lobby?.status === "finished";
+
   const gameData = lobby?.game;
 
   // ✅ start game: bruker temaet som ligger i lobby.settings
-  const handleStartGame = useCallback(async () => {
-    if (!inviteCode || !myPlayer) return;
+const handleStartGame = useCallback(async () => {
+  if (!inviteCode || !myPlayer) return;
 
-    const themeId: string | null = lobby?.settings?.selectedThemeId ?? null;
+  const themeId: string | null = lobby?.settings?.selectedThemeId ?? null;
+  if (!themeId) {
+    alert("Host must select a theme first!");
+    return;
+  }
 
-    if (!themeId) {
-      alert("Host must select a theme first!");
-      return;
-    }
+  const words = WORD_DATA[themeId];
+  if (!words?.length) {
+    alert("No words found for theme: " + themeId);
+    return;
+  }
 
-    const words = WORD_DATA[themeId];
-    if (!words?.length) {
-      alert("No words found for theme: " + themeId);
-      return;
-    }
+  // ✅ Velg secret word (crew får dette)
+  const randomWord = words[Math.floor(Math.random() * words.length)];
 
-    const randomWord = words[Math.floor(Math.random() * words.length)];
-    await startGame(inviteCode, myPlayer.uid, randomWord, themeId);
-  }, [inviteCode, myPlayer, lobby]);
+  // ✅ Lag snilt imposter-hint:
+  // - fortell temaet
+  // - vis 3 eksempler (ekskluder secret word)
+  // - vis lengde på ordet (hjelper litt uten å avsløre)
+  const pool = words.filter((w) => w !== randomWord);
+  const examples: string[] = [];
+  while (examples.length < Math.min(3, pool.length)) {
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    if (!examples.includes(pick)) examples.push(pick);
+  }
+
+  const imposterHint = `Theme: ${themeId}. Example words: ${examples.join(", ")}. Secret word length: ${randomWord.length}.`;
+
+  // ✅ Start game med hint
+  await startGame(inviteCode, myPlayer.uid, randomWord, themeId, imposterHint);
+}, [inviteCode, myPlayer, lobby]);
+
 
   return (
     <>
@@ -262,40 +340,44 @@ export default function Home() {
           <Title>Imposter Game</Title>
 
           {/* ✅ game view */}
-          {isStarted ? (
-            <Game
-              inviteCode={inviteCode}
-              players={orderedPlayers}
-              myUid={uid}
-              game={gameData}
-              isHost={isHost}
-              hostUid={myPlayer?.uid ?? ""}
-            />
+          {isInGame ? (
+  <Game
+    inviteCode={inviteCode}
+    players={orderedPlayers}
+    myUid={uid}
+    game={gameData}
+    isHost={isHost}
+    hostUid={myPlayer?.uid ?? ""}
+  />
+) : !inviteCode ? (
+  // ✅ STARTMENY (Create/Join)
+  <Lobby
+    mode="menu"
+    players={orderedPlayers}
+    onJoinGame={handleJoinGame}
+    onCreateGame={handleCreateGame}
+  />
+) : showThemes ? (
+  // ✅ THEMES
+  <Themes
+    onBack={() => setShowThemes(false)}
+    onStartGame={handleStartGame}
+    isHost={isHost}
+    canStartGame={!!lobby?.settings?.selectedThemeId}
+    inviteCode={inviteCode}
+    hostUid={myPlayer?.uid ?? ""}
+  />
+) : (
+  // ✅ LOBBY ROM (etter join/create)
+  <Lobby
+    mode="room"
+    players={orderedPlayers}
+    isHost={isHost}
+    onContinueToThemes={() => setShowThemes(true)}
+    onExitLobby={handleExitLobby}
+  />
+)}
 
-          ) : (
-            <>
-              <ViewContainer $isActive={!showThemes}>
-                <Lobby
-                  onStartGame={() => setShowThemes(true)}
-                  players={orderedPlayers}
-                  onJoinGame={handleJoinGame}
-                  onCreateGame={handleCreateGame}
-                  isHost={isHost}
-                />
-              </ViewContainer>
-
-              <ViewContainer $isActive={showThemes}>
-                <Themes
-                  onBack={() => setShowThemes(false)}
-                  onStartGame={handleStartGame}
-                  isHost={isHost}
-                  canStartGame={!!lobby?.settings?.selectedThemeId}
-                  inviteCode={inviteCode}
-                  hostUid={myPlayer?.uid ?? ""}
-                />
-              </ViewContainer>
-            </>
-          )}
         </MainContainer>
       </PageContainer>
 

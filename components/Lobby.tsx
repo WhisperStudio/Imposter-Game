@@ -1,17 +1,14 @@
 "use client";
 
 import styled from "styled-components";
-import { FaPlay, FaUserPlus, FaGamepad } from "react-icons/fa";
+import { FaPlay, FaUserPlus, FaGamepad, FaSignOutAlt } from "react-icons/fa";
 import { useState, useEffect, useMemo } from "react";
 import type { Player } from "@/types/player";
 
 import { AstronautAvatar } from "./avatars/AstronautAvatar";
 import { RedAstronautAvatar } from "./avatars/RedAstronautAvatar";
 
-import {
-  readType,
-  type AvatarType,
-} from "@/firebase/avatarPrefs";
+import { readSkin, readType, type AvatarSkin, type AvatarType } from "@/firebase/avatarPrefs";
 
 /* ---------------- helpers ---------------- */
 
@@ -26,34 +23,33 @@ function getOrCreateUid() {
   return uid;
 }
 
-type AvatarSkin = "classic" | "midnight" | "mint" | "sunset" | "cyber";
-
-function readSkin(uid: string): AvatarSkin {
-  if (typeof window === "undefined") return "classic";
-  const key = `imposter_skin:${uid}`;
-  const raw = localStorage.getItem(key);
-  const valid = ["classic", "midnight", "mint", "sunset", "cyber"];
-  if (raw && valid.includes(raw)) return raw as AvatarSkin;
-  return "classic";
-}
-
-/* ---------------- types ---------------- */
+type LobbyMode = "menu" | "room";
 
 interface LobbyProps {
-  onStartGame: () => void;
-  players: Player[];
+  mode?: LobbyMode;
+
+  // menu actions
   onJoinGame?: (code: string) => void;
   onCreateGame?: () => void;
+
+  // room actions
+  onContinueToThemes?: () => void;
+  onExitLobby?: () => void;
+
+  // shared
+  players: Player[];
   isHost?: boolean;
 }
 
 /* ---------------- component ---------------- */
 
 export default function Lobby({
-  onStartGame,
+  mode = "menu",
   players,
   onJoinGame,
   onCreateGame,
+  onContinueToThemes,
+  onExitLobby,
   isHost = false,
 }: LobbyProps) {
   const uid = useMemo(() => getOrCreateUid(), []);
@@ -61,32 +57,27 @@ export default function Lobby({
   const [inviteCode, setInviteCode] = useState("");
   const [showJoinForm, setShowJoinForm] = useState(false);
 
-  // ✅ prefs
+  // prefs
   const [avatarType, setAvatarType] = useState<AvatarType>("classicAstronaut");
   const [skin, setSkin] = useState<AvatarSkin>("classic");
 
-  // init prefs
   useEffect(() => {
     if (!uid) return;
     setAvatarType(readType(uid));
     setSkin(readSkin(uid));
   }, [uid]);
 
-  // live update when SettingsPanel changes prefs
   useEffect(() => {
     if (!uid) return;
-
     const onPrefs = () => {
       setAvatarType(readType(uid));
       setSkin(readSkin(uid));
     };
-
     window.addEventListener("imposter:avatarPrefs", onPrefs);
     return () => window.removeEventListener("imposter:avatarPrefs", onPrefs);
   }, [uid]);
 
-  const AvatarComponent =
-    avatarType === "redAstronaut" ? RedAstronautAvatar : AstronautAvatar;
+  const AvatarComponent = avatarType === "redAstronaut" ? RedAstronautAvatar : AstronautAvatar;
 
   const handleJoinGame = () => {
     if (inviteCode.trim() && onJoinGame) {
@@ -97,116 +88,108 @@ export default function Lobby({
 
   return (
     <LobbyContainer>
-      <h2
-        style={{
-          fontSize: "2.5rem",
-          color: "#e2e8f0",
-          marginBottom: "1rem",
-          textAlign: "center",
-          background: "linear-gradient(45deg, #818cf8, #c7d2fe)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text",
-        }}
-      >
-        Lobby
+      <h2 style={{ fontSize: "2.5rem", color: "#e2e8f0", marginBottom: "1rem", textAlign: "center" }}>
+        {mode === "menu" ? "Start" : "Lobby"}
       </h2>
 
-      <PlayersGrid>
-        {players.map((player) => (
-          <PlayerCard key={player.uid}>
-            {/* ✅ same skin filter look as Settings + page */}
-            <SkinScope data-skin={player.uid === uid ? skin : "classic"}>
-              <AstronautAvatar size={80} />
-            </SkinScope>
+      {/* PLAYERS always visible in room mode, optional in menu mode */}
+      {mode === "room" && (
+        <PlayersGrid>
+          {players.map((player) => (
+            <PlayerCard key={player.uid}>
+              <SkinScope data-skin={player.uid === uid ? skin : "classic"}>
+                <AvatarComponent size={80} />
+              </SkinScope>
 
-            <PlayerName className={player.playerId === 100 ? "host" : ""}>
-              {player.name}
-              {player.playerId === 100 && " (Host)"}
-            </PlayerName>
-          </PlayerCard>
-        ))}
-      </PlayersGrid>
+              <PlayerName className={player.playerId === 100 ? "host" : ""}>
+                {player.name}
+                {player.playerId === 100 && " (Host)"}
+              </PlayerName>
+            </PlayerCard>
+          ))}
+        </PlayersGrid>
+      )}
 
-      <GameControls>
-        {!showJoinForm ? (
-          <>
-            <Button
-              onClick={() => onCreateGame?.()}
-              $variant="primary"
-              style={{ width: "100%", justifyContent: "center" }}
-            >
-              <FaGamepad /> Create New Game
-            </Button>
-
-            <Divider>OR</Divider>
-
-            <Button
-              onClick={() => setShowJoinForm(true)}
-              $variant="secondary"
-              style={{ width: "100%", justifyContent: "center" }}
-            >
-              <FaUserPlus /> Join Existing Game
-            </Button>
-          </>
-        ) : (
-          <>
-            <div
-              style={{
-                width: "100%",
-                textAlign: "center",
-                marginBottom: "0.5rem",
-              }}
-            >
-              <p style={{ color: "#e2e8f0", marginBottom: "0.5rem" }}>
-                Enter the invite code
-              </p>
-              <Input
-                type="text"
-                placeholder="e.g., ABC123"
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                maxLength={6}
-                style={{ textAlign: "center", letterSpacing: "0.5em" }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: "1rem", width: "100%" }}>
+      {/* MENU MODE */}
+      {mode === "menu" && (
+        <GameControls>
+          {!showJoinForm ? (
+            <>
               <Button
-                onClick={handleJoinGame}
+                onClick={() => onCreateGame?.()}
                 $variant="primary"
-                disabled={!inviteCode.trim()}
-                style={{ flex: 1 }}
+                style={{ width: "100%", justifyContent: "center" }}
               >
-                Join
+                <FaGamepad /> Create New Game
               </Button>
-              <Button
-                onClick={() => setShowJoinForm(false)}
-                $variant="secondary"
-                style={{ flex: 1 }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </>
-        )}
-      </GameControls>
 
-      {isHost && players.length > 0 && (
-        <Button
-          onClick={onStartGame}
-          $variant="primary"
-          style={{
-            marginTop: "1rem",
-            padding: "1rem 3rem",
-            fontSize: "1.25rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-          }}
-          disabled={players.length < 1}
-        >
-          <FaPlay /> Start Game
-        </Button>
+              <Divider>OR</Divider>
+
+              <Button
+                onClick={() => setShowJoinForm(true)}
+                $variant="secondary"
+                style={{ width: "100%", justifyContent: "center" }}
+              >
+                <FaUserPlus /> Join Existing Game
+              </Button>
+            </>
+          ) : (
+            <>
+              <div style={{ width: "100%", textAlign: "center", marginBottom: "0.5rem" }}>
+                <p style={{ color: "#e2e8f0", marginBottom: "0.5rem" }}>Enter the invite code</p>
+                <Input
+                  type="text"
+                  placeholder="e.g., ABC123"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  maxLength={6}
+                  style={{ textAlign: "center", letterSpacing: "0.5em" }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: "1rem", width: "100%" }}>
+                <Button
+                  onClick={handleJoinGame}
+                  $variant="primary"
+                  disabled={!inviteCode.trim()}
+                  style={{ flex: 1 }}
+                >
+                  Join
+                </Button>
+                <Button
+                  onClick={() => setShowJoinForm(false)}
+                  $variant="secondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
+          )}
+        </GameControls>
+      )}
+
+      {/* ROOM MODE CONTROLS */}
+      {mode === "room" && (
+        <RoomActions>
+          <Button
+            onClick={() => onExitLobby?.()}
+            $variant="secondary"
+            style={{ justifyContent: "center" }}
+          >
+            <FaSignOutAlt /> Exit Lobby
+          </Button>
+
+          {isHost && (
+            <Button
+              onClick={() => onContinueToThemes?.()}
+              $variant="primary"
+              style={{ justifyContent: "center" }}
+              disabled={players.length < 1}
+            >
+              <FaPlay /> Continue to Themes
+            </Button>
+          )}
+        </RoomActions>
       )}
     </LobbyContainer>
   );
@@ -218,7 +201,7 @@ const LobbyContainer = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2rem;
+  gap: 1.25rem;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
@@ -231,8 +214,9 @@ const PlayersGrid = styled.div`
   justify-content: center;
   gap: 2rem;
   width: 100%;
-  margin: 1rem 0;
+  margin: 0.5rem 0 0.75rem;
   border-bottom: 2px solid #a5a5a5;
+  padding-bottom: 1rem;
 `;
 
 const PlayerCard = styled.div`
@@ -271,7 +255,7 @@ const Button = styled.button<{ $variant?: "primary" | "secondary" }>`
   border: none;
   border-radius: 8px;
   font-size: 1.1rem;
-  font-weight: 500;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -279,20 +263,16 @@ const Button = styled.button<{ $variant?: "primary" | "secondary" }>`
   transition: all 0.2s ease;
   background: ${({ $variant }) => ($variant === "primary" ? "#4f46e5" : "#374151")};
   color: white;
-  margin: 0.5rem 0;
 
   &:hover {
-    opacity: 0.9;
+    opacity: 0.92;
     transform: translateY(-2px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
-      0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
-    box-shadow: none;
   }
 `;
 
@@ -305,12 +285,10 @@ const Input = styled.input`
   font-size: 1rem;
   width: 100%;
   max-width: 300px;
-  transition: all 0.2s ease;
 
   &:focus {
     outline: none;
     border-color: #4f46e5;
-    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
   }
 
   &::placeholder {
@@ -324,8 +302,8 @@ const GameControls = styled.div`
   align-items: center;
   gap: 1.25rem;
   width: 100%;
-  max-width: 400px;
-  margin-top: 2rem;
+  max-width: 420px;
+  margin-top: 0.5rem;
   padding: 2rem;
   background: rgba(15, 23, 42, 0.6);
   border-radius: 12px;
@@ -338,7 +316,7 @@ const Divider = styled.div`
   gap: 1rem;
   width: 100%;
   color: #6b7280;
-  margin: 0.5rem 0;
+  margin: 0.25rem 0;
   font-size: 0.9rem;
 
   &::before,
@@ -350,7 +328,16 @@ const Divider = styled.div`
   }
 `;
 
-/* ✅ same filter-skins as settings */
+const RoomActions = styled.div`
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+`;
+
+/* same skin filter */
 const SkinScope = styled.div`
   --hue: 0deg;
   --sat: 1;

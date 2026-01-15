@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styled, { keyframes } from "styled-components";
 import type { Player } from "@/types/player";
+import { readSkin, readType, type AvatarSkin, type AvatarType } from "@/firebase/avatarPrefs";
+import { RedAstronautAvatar } from "@/components/avatars/RedAstronautAvatar";
 import { FaUserSecret, FaUserAstronaut, FaEyeSlash } from "react-icons/fa";
-
+import { AstronautAvatar } from "./avatars/AstronautAvatar";
 import ChatPanel from "@/components/ChatPanel";
 import VotePanel from "@/components/VotePanel";
 import ResultPanel from "@/components/ResultPanel";
@@ -37,6 +39,26 @@ type GameProps = {
 };
 
 export default function Game({ inviteCode, players, myUid, game, isHost, hostUid }: GameProps) {
+  // Avatar prefs state
+  const [avatarType, setAvatarType] = useState<AvatarType>("classicAstronaut");
+  const [skin, setSkin] = useState<AvatarSkin>("classic");
+
+  // Load avatar prefs
+  useEffect(() => {
+    if (!myUid) return;
+    setAvatarType(readType(myUid));
+    setSkin(readSkin(myUid));
+    
+    const onPrefs = () => {
+      setAvatarType(readType(myUid));
+      setSkin(readSkin(myUid));
+    };
+    
+    window.addEventListener("imposter:avatarPrefs", onPrefs);
+    return () => window.removeEventListener("imposter:avatarPrefs", onPrefs);
+  }, [myUid]);
+  
+  const AvatarComponent = avatarType === "redAstronaut" ? RedAstronautAvatar : AstronautAvatar;
   const role = game?.assignments?.[myUid]?.role;
   const isImposter = role === "imposter";
   const word = game?.word;
@@ -126,8 +148,16 @@ export default function Game({ inviteCode, players, myUid, game, isHost, hostUid
       )}
 
       {phase === "result" && game?.result && game?.imposterUid && (
-        <ResultPanel players={players} imposterUid={game.imposterUid} result={game.result} />
-      )}
+          <ResultPanel
+            inviteCode={inviteCode}
+            players={players}
+            imposterUid={game.imposterUid}
+            result={game.result as any}
+            isHost={isHost}
+            hostUid={hostUid}
+          />
+        )}
+
 
       {/* PLAYER LIST */}
       <PlayerGrid>
@@ -135,7 +165,9 @@ export default function Game({ inviteCode, players, myUid, game, isHost, hostUid
         <List>
           {players.map((p) => (
             <PlayerRow key={p.uid} $isMe={p.uid === myUid}>
-              <AvatarPlaceholder>👨‍🚀</AvatarPlaceholder>
+              <SkinScope data-skin={skin}>
+                <AvatarComponent size={80} />
+              </SkinScope>
               <PName>
                 {p.name} {p.uid === myUid && "(You)"}
               </PName>
@@ -390,6 +422,56 @@ const PlayerRow = styled.div<{ $isMe: boolean }>`
 
 const AvatarPlaceholder = styled.div`
   font-size: 1.5rem;
+`;
+
+const SkinScope = styled.div`
+  --hue: 0deg;
+  --sat: 1;
+  --bright: 1;
+  --contrast: 1;
+
+  display: grid;
+  place-items: center;
+
+  & > * {
+    filter: hue-rotate(var(--hue)) saturate(var(--sat)) brightness(var(--bright))
+      contrast(var(--contrast));
+  }
+
+  &[data-skin="classic"] {
+    --hue: 0deg;
+    --sat: 1;
+    --bright: 1;
+    --contrast: 1.02;
+  }
+
+  &[data-skin="midnight"] {
+    --hue: 210deg;
+    --sat: 1.25;
+    --bright: 0.92;
+    --contrast: 1.15;
+  }
+
+  &[data-skin="mint"] {
+    --hue: 135deg;
+    --sat: 1.15;
+    --bright: 1.05;
+    --contrast: 1.05;
+  }
+
+  &[data-skin="sunset"] {
+    --hue: 320deg;
+    --sat: 1.25;
+    --bright: 1.03;
+    --contrast: 1.08;
+  }
+
+  &[data-skin="cyber"] {
+    --hue: 260deg;
+    --sat: 1.45;
+    --bright: 0.98;
+    --contrast: 1.25;
+  }
 `;
 
 const PName = styled.div`
