@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import styled, { keyframes, css } from "styled-components";
 import type { Player } from "@/types/player";
 import { submitVote } from "@/firebase/lobby";
-import { FaFingerprint, FaArrowRight, FaHistory, FaQuoteLeft, FaHourglassHalf } from "react-icons/fa";
+import { FaFingerprint, FaArrowRight, FaHistory, FaHourglassHalf } from "react-icons/fa";
 import ChatPanel from "@/components/ChatPanel"; 
 
 // --- TYPES ---
@@ -32,21 +32,12 @@ export default function VotePanel({ inviteCode, myUid, players, votes, chat }: P
   const iVoted = !!votes?.[myUid];
 
   // Lokal state: Har jeg godkjent review-skjermen?
-  // Hvis jeg ikke har stemt, starter vi ALLTID med isReviewing = true
   const [isReviewing, setIsReviewing] = useState(!iVoted);
 
   const voteCount = useMemo(() => Object.keys(votes ?? {}).length, [votes]);
   
   // Filtrer kandidater (alle unntatt meg selv)
   const candidates = useMemo(() => players.filter(p => p.uid !== myUid), [players, myUid]);
-
-  const getName = (uid: string) => players.find(p => p.uid === uid)?.name ?? "Unknown";
-
-  // Finn siste melding for å vise den stort
-  const lastMessage = useMemo(() => {
-    if (!chat?.log || chat.log.length === 0) return null;
-    return chat.log[chat.log.length - 1];
-  }, [chat]);
 
   const handleVote = async () => {
     setError(null);
@@ -55,7 +46,6 @@ export default function VotePanel({ inviteCode, myUid, players, votes, chat }: P
     try {
       setSending(true);
       await submitVote(inviteCode, myUid, selected);
-      // Når vi har stemt, trenger vi ikke reviewe lenger
       setIsReviewing(false);
     } catch (e: any) {
       setError(e?.message ?? "Vote failed");
@@ -80,8 +70,6 @@ export default function VotePanel({ inviteCode, myUid, players, votes, chat }: P
 
   // --- 2. REVIEW MODE (Standard start for alle) ---
   if (isReviewing) {
-    // SIKKERHET: Hvis chat-dataen er forsinket fra serveren, vis en loading-skjerm
-    // Dette hindrer "Empty State" eller at koden kræsjer.
     if (!chat || !chat.log) {
         return (
             <VotedState>
@@ -102,21 +90,8 @@ export default function VotePanel({ inviteCode, myUid, players, votes, chat }: P
             Review the final transmission before voting.
          </ReviewInstruction>
 
-         {/* HIGHLIGHT BOX: Viser siste melding ekstremt tydelig */}
-         {lastMessage && (
-             <LastMessageHighlight>
-                 <LastMsgLabel>LAST TRANSMISSION DETECTED</LastMsgLabel>
-                 <LastMsgContent>
-                    <FaQuoteLeft style={{fontSize: '0.8rem', opacity: 0.5, marginRight: '8px', verticalAlign: 'top'}} />
-                    {lastMessage.text}
-                 </LastMsgContent>
-                 <LastMsgAuthor>— {getName(lastMessage.uid)}</LastMsgAuthor>
-             </LastMessageHighlight>
-         )}
-
+         {/* ChatPanel / Feed vises her */}
          <ReviewContainer>
-            {/* Vi sender 'chat' prop videre. Hvis den oppdateres live fra Firebase,
-                vil ChatPanel også oppdatere seg her mens man ser på den. */}
             <ChatPanel 
                 inviteCode={inviteCode} 
                 myUid={myUid} 
@@ -151,7 +126,6 @@ export default function VotePanel({ inviteCode, myUid, players, votes, chat }: P
             onClick={() => setSelected(p.uid)}
           >
             <SuspectAvatar>
-                {/* Erstatt med din PlayerAvatar-komponent hvis du har den tilgjengelig, ellers tekst */}
                 <AvatarPlaceholder>{p.name.charAt(0).toUpperCase()}</AvatarPlaceholder>
             </SuspectAvatar>
             <SuspectName>{p.name}</SuspectName>
@@ -210,50 +184,6 @@ const ReviewInstruction = styled.p`
     color: #94a3b8;
     font-size: 0.9rem;
     margin-bottom: 1.5rem;
-`;
-
-const LastMessageHighlight = styled.div`
-    background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), rgba(124, 58, 237, 0.2));
-    border: 1px solid rgba(139, 92, 246, 0.4);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    text-align: center;
-    box-shadow: 0 0 25px rgba(139, 92, 246, 0.15);
-    position: relative;
-    overflow: hidden;
-
-    &::before {
-        content: "";
-        position: absolute;
-        top: 0; left: 0; right: 0; height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.8), transparent);
-    }
-`;
-
-const LastMsgLabel = styled.div`
-    font-size: 0.75rem;
-    color: #a78bfa;
-    letter-spacing: 2px;
-    font-weight: bold;
-    margin-bottom: 0.75rem;
-    text-transform: uppercase;
-`;
-
-const LastMsgContent = styled.div`
-    font-size: 1.6rem;
-    font-weight: 800;
-    color: #fff;
-    margin-bottom: 0.5rem;
-    line-height: 1.2;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
-    font-family: 'Courier New', Courier, monospace; /* Typewriter feel */
-`;
-
-const LastMsgAuthor = styled.div`
-    font-size: 0.9rem;
-    color: #cbd5e1;
-    font-style: italic;
 `;
 
 const ReviewContainer = styled.div`
