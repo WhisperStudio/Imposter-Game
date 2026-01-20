@@ -1,28 +1,52 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import styled, { keyframes, css } from "styled-components";
 import type { Player } from "@/types/player";
 import { submitVote } from "@/firebase/lobby";
-import { FaFingerprint, FaCheckCircle } from "react-icons/fa";
+import { FaFingerprint, FaArrowRight, FaHistory, FaQuoteLeft, FaHourglassHalf } from "react-icons/fa";
+import ChatPanel from "@/components/ChatPanel"; 
+
+// --- TYPES ---
+type ChatData = {
+  round: number;
+  turnIndex: number;
+  turnUid: string;
+  log: Array<{ uid: string; text: string; round: number; index: number; at: number }>;
+};
 
 type Props = {
   inviteCode: string;
   myUid: string;
   players: Player[];
   votes: Record<string, string>;
+  chat?: ChatData; 
 };
 
-export default function VotePanel({ inviteCode, myUid, players, votes }: Props) {
+export default function VotePanel({ inviteCode, myUid, players, votes, chat }: Props) {
   const [selected, setSelected] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-
+  
+  // Sjekk om jeg allerede har stemt i databasen
   const iVoted = !!votes?.[myUid];
+
+  // Lokal state: Har jeg godkjent review-skjermen?
+  // Hvis jeg ikke har stemt, starter vi ALLTID med isReviewing = true
+  const [isReviewing, setIsReviewing] = useState(!iVoted);
+
   const voteCount = useMemo(() => Object.keys(votes ?? {}).length, [votes]);
   
-  // Players I can vote for (everyone except me)
+  // Filtrer kandidater (alle unntatt meg selv)
   const candidates = useMemo(() => players.filter(p => p.uid !== myUid), [players, myUid]);
+
+  const getName = (uid: string) => players.find(p => p.uid === uid)?.name ?? "Unknown";
+
+  // Finn siste melding for å vise den stort
+  const lastMessage = useMemo(() => {
+    if (!chat?.log || chat.log.length === 0) return null;
+    return chat.log[chat.log.length - 1];
+  }, [chat]);
 
   const handleVote = async () => {
     setError(null);
@@ -31,12 +55,15 @@ export default function VotePanel({ inviteCode, myUid, players, votes }: Props) 
     try {
       setSending(true);
       await submitVote(inviteCode, myUid, selected);
+      // Når vi har stemt, trenger vi ikke reviewe lenger
+      setIsReviewing(false);
     } catch (e: any) {
       setError(e?.message ?? "Vote failed");
       setSending(false);
     }
   };
 
+  // --- 1. VOTED STATE (Ferdig stemt) ---
   if (iVoted) {
       return (
           <VotedState>
@@ -51,6 +78,64 @@ export default function VotePanel({ inviteCode, myUid, players, votes }: Props) 
       )
   }
 
+  // --- 2. REVIEW MODE (Standard start for alle) ---
+  if (isReviewing) {
+    // SIKKERHET: Hvis chat-dataen er forsinket fra serveren, vis en loading-skjerm
+    // Dette hindrer "Empty State" eller at koden kræsjer.
+    if (!chat || !chat.log) {
+        return (
+            <VotedState>
+                <PulseIcon style={{color: '#6366f1'}}><FaHourglassHalf /></PulseIcon>
+                <VotedTitle>SYNCING LOGS...</VotedTitle>
+                <VotedSub>Retrieving mission data from mainframe.</VotedSub>
+            </VotedState>
+        );
+    }
+
+    return (
+      <PanelWrap>
+         <ReviewHeader>
+            <FaHistory /> MISSION LOG REVIEW
+         </ReviewHeader>
+         
+         <ReviewInstruction>
+            Review the final transmission before voting.
+         </ReviewInstruction>
+
+         {/* HIGHLIGHT BOX: Viser siste melding ekstremt tydelig */}
+         {lastMessage && (
+             <LastMessageHighlight>
+                 <LastMsgLabel>LAST TRANSMISSION DETECTED</LastMsgLabel>
+                 <LastMsgContent>
+                    <FaQuoteLeft style={{fontSize: '0.8rem', opacity: 0.5, marginRight: '8px', verticalAlign: 'top'}} />
+                    {lastMessage.text}
+                 </LastMsgContent>
+                 <LastMsgAuthor>— {getName(lastMessage.uid)}</LastMsgAuthor>
+             </LastMessageHighlight>
+         )}
+
+         <ReviewContainer>
+            {/* Vi sender 'chat' prop videre. Hvis den oppdateres live fra Firebase,
+                vil ChatPanel også oppdatere seg her mens man ser på den. */}
+            <ChatPanel 
+                inviteCode={inviteCode} 
+                myUid={myUid} 
+                players={players} 
+                chat={chat} 
+                readOnly={true} 
+            />
+         </ReviewContainer>
+
+         <ActionFooter>
+            <ProceedButton onClick={() => setIsReviewing(false)}>
+               PROCEED TO VOTE <FaArrowRight />
+            </ProceedButton>
+         </ActionFooter>
+      </PanelWrap>
+    );
+  }
+
+  // --- 3. VOTING MODE (Velg mistenkt) ---
   return (
     <PanelWrap>
       <HeaderSection>
@@ -66,8 +151,8 @@ export default function VotePanel({ inviteCode, myUid, players, votes }: Props) 
             onClick={() => setSelected(p.uid)}
           >
             <SuspectAvatar>
-                {/* Placeholder for avatar, or import real avatar here if available */}
-                <div style={{fontSize: '2rem'}}>👤</div> 
+                {/* Erstatt med din PlayerAvatar-komponent hvis du har den tilgjengelig, ellers tekst */}
+                <AvatarPlaceholder>{p.name.charAt(0).toUpperCase()}</AvatarPlaceholder>
             </SuspectAvatar>
             <SuspectName>{p.name}</SuspectName>
             <SuspectStatus>{selected === p.uid ? "TARGET ACQUIRED" : "SUSPECT"}</SuspectStatus>
@@ -85,6 +170,10 @@ export default function VotePanel({ inviteCode, myUid, players, votes }: Props) 
             {sending ? "TRANSMITTING..." : selected ? "CONFIRM ACCUSATION" : "SELECT A SUSPECT"}
         </VoteButton>
       </ActionFooter>
+      
+      <BackToChatLink onClick={() => setIsReviewing(true)}>
+        Show Chat Log
+      </BackToChatLink>
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
     </PanelWrap>
@@ -98,8 +187,124 @@ const fadeIn = keyframes`from { opacity: 0; transform: translateY(10px); } to { 
 const PanelWrap = styled.div`
   width: 100%;
   animation: ${fadeIn} 0.5s ease-out;
+  display: flex;
+  flex-direction: column;
 `;
 
+/* Review Mode Styles */
+const ReviewHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: #fff;
+  font-family: monospace;
+  margin-bottom: 0.5rem;
+  letter-spacing: 2px;
+  font-weight: bold;
+  font-size: 1.2rem;
+`;
+
+const ReviewInstruction = styled.p`
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+`;
+
+const LastMessageHighlight = styled.div`
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), rgba(124, 58, 237, 0.2));
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    box-shadow: 0 0 25px rgba(139, 92, 246, 0.15);
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0; height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.8), transparent);
+    }
+`;
+
+const LastMsgLabel = styled.div`
+    font-size: 0.75rem;
+    color: #a78bfa;
+    letter-spacing: 2px;
+    font-weight: bold;
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+`;
+
+const LastMsgContent = styled.div`
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    font-family: 'Courier New', Courier, monospace; /* Typewriter feel */
+`;
+
+const LastMsgAuthor = styled.div`
+    font-size: 0.9rem;
+    color: #cbd5e1;
+    font-style: italic;
+`;
+
+const ReviewContainer = styled.div`
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  background: rgba(15, 23, 42, 0.4);
+  /* Limit height slightly to ensure button is visible on small screens */
+  max-height: 400px; 
+  display: flex;
+  flex-direction: column;
+`;
+
+const ProceedButton = styled.button`
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  color: white;
+  border: none;
+  padding: 1rem 2.5rem;
+  border-radius: 12px;
+  font-weight: bold;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+
+  &:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 25px rgba(34, 197, 94, 0.6);
+    filter: brightness(1.1);
+  }
+`;
+
+const BackToChatLink = styled.button`
+  background: none;
+  border: none;
+  color: #64748b;
+  margin-top: 1rem;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 0.8rem;
+  
+  &:hover { color: #94a3b8; }
+`;
+
+/* Voting Mode Styles */
 const HeaderSection = styled.div`
   text-align: center;
   margin-bottom: 2rem;
@@ -161,7 +366,13 @@ const SuspectAvatar = styled.div`
   align-items: center;
   justify-content: center;
   margin-bottom: 0.75rem;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #64748b;
+  border: 1px solid rgba(255,255,255,0.1);
 `;
+
+const AvatarPlaceholder = styled.div``;
 
 const SuspectName = styled.div`
   font-weight: 700;
@@ -233,6 +444,7 @@ const VotedState = styled.div`
     justify-content: center;
     min-height: 300px;
     animation: ${fadeIn} 0.5s ease-out;
+    text-align: center;
 `;
 
 const pulse = keyframes`
@@ -252,11 +464,13 @@ const VotedTitle = styled.h2`
     font-size: 1.5rem;
     color: #fff;
     margin: 0 0 0.5rem 0;
+    letter-spacing: 2px;
 `;
 
 const VotedSub = styled.p`
     color: #94a3b8;
     margin-bottom: 2rem;
+    max-width: 80%;
 `;
 
 const ProgressBar = styled.div`

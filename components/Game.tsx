@@ -115,15 +115,22 @@ export default function Game({ inviteCode, players, myUid, game, isHost, hostUid
     </PerspectiveContainer>
   )}
 
-  {/* ✅ Chat skal ligge her (tar plassen der flipkortet var) */}
+  {/* ✅ Chat skal ligge her */}
   {phase === "chat" && game?.chat && (
     <GlassPanel>
       <ChatPanel inviteCode={inviteCode} myUid={myUid} players={players} chat={game.chat} />
     </GlassPanel>
   )}
 
+  {/* ✅ Vote Panel - Nå med chat-prop sendt inn */}
   {phase === "vote" && (
-    <VotePanel inviteCode={inviteCode} myUid={myUid} players={players} votes={game?.votes ?? {}} />
+    <VotePanel 
+        inviteCode={inviteCode} 
+        myUid={myUid} 
+        players={players} 
+        votes={game?.votes ?? {}} 
+        chat={game?.chat} // <--- Sender chatten videre slik at VotePanel kan vise review
+    />
   )}
 
   {phase === "result" && game?.result && game?.imposterUid && (

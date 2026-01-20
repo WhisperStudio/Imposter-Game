@@ -9,6 +9,8 @@ import type { AvatarSkin, AvatarType } from "@/firebase/avatarPrefs";
 
 import { PlayerAvatar } from "@/components/avatars/PlayerAvatar";
 
+// --- Types ---
+
 type ChatLogItem = {
   uid: string;
   text: string;
@@ -36,6 +38,8 @@ type Props = {
   avatarSize?: number;
   secretWord?: string | null;
   isImposter?: boolean;
+  
+  readOnly?: boolean;
 };
 
 export default function ChatPanel({
@@ -48,6 +52,7 @@ export default function ChatPanel({
   avatarSize = 42,
   secretWord = null,
   isImposter = false,
+  readOnly = false, 
 }: Props) {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +75,7 @@ export default function ChatPanel({
 
   const handleSend = async () => {
     setError(null);
-    if (!isMyTurn || !input.trim()) return;
+    if (!isMyTurn || !input.trim() || readOnly) return;
 
     const normalized = input.trim().toLowerCase();
     const secret = (secretWord ?? "").trim().toLowerCase();
@@ -107,10 +112,16 @@ export default function ChatPanel({
 
   return (
     <PanelWrap>
-      <HeaderBar $isMyTurn={isMyTurn}>
-        <StatusIcon>{isMyTurn ? <FaBroadcastTower /> : <FaLock />}</StatusIcon>
+      {/* HEADER */}
+      <HeaderBar $isMyTurn={!readOnly && isMyTurn}>
+        <StatusIcon>
+            {readOnly ? <FaBroadcastTower /> : (isMyTurn ? <FaBroadcastTower /> : <FaLock />)}
+        </StatusIcon>
+        
         <StatusText>
-          {isMyTurn ? (
+          {readOnly ? (
+             <span>MISSION TRANSCRIPT: <b>REVIEW MODE</b></span>
+          ) : isMyTurn ? (
             <span>
               CHANNEL OPEN: <b>YOUR TURN</b>
             </span>
@@ -152,7 +163,6 @@ export default function ChatPanel({
 
           return (
             <MessageRow key={`${m.at}-${idx}`} $isMe={isMe}>
-              {/* LEFT avatar only for others */}
               {!isMe && (
                 <AvatarCircle>
                   <SkinScope data-skin={msgSkin}>
@@ -166,7 +176,6 @@ export default function ChatPanel({
                 <MessageText>{m.text}</MessageText>
               </MessageBubble>
 
-              {/* RIGHT avatar only for me */}
               {isMe && (
                 <AvatarCircle $isMe>
                   <SkinScope data-skin={msgSkin}>
@@ -181,22 +190,25 @@ export default function ChatPanel({
         <div ref={messagesEndRef} />
       </ChatWindow>
 
-      <InputArea>
-        <StyledInput
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={isMyTurn ? "Transmit one word..." : `Waiting for ${turnName}...`}
-          disabled={!isMyTurn || sending}
-          autoFocus={isMyTurn}
-          maxLength={20}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSend();
-          }}
-        />
-        <SendButton onClick={handleSend} disabled={!isMyTurn || sending || !input.trim()}>
-          {sending ? "..." : <FaPaperPlane />}
-        </SendButton>
-      </InputArea>
+      {/* INPUT AREA */}
+      {!readOnly && (
+        <InputArea>
+            <StyledInput
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={isMyTurn ? "Transmit one word..." : `Waiting for ${turnName}...`}
+            disabled={!isMyTurn || sending}
+            autoFocus={isMyTurn}
+            maxLength={20}
+            onKeyDown={(e) => {
+                if (e.key === "Enter") handleSend();
+            }}
+            />
+            <SendButton onClick={handleSend} disabled={!isMyTurn || sending || !input.trim()}>
+            {sending ? "..." : <FaPaperPlane />}
+            </SendButton>
+        </InputArea>
+      )}
 
       {error && <ErrorMessage>{error}</ErrorMessage>}
     </PanelWrap>
@@ -219,11 +231,10 @@ const pulseBorder = keyframes`
 const PanelWrap = styled.div`
   display: flex;
   flex-direction: column;
-  height: 500px; /* Fixed height for consistency */
+  height: 500px;
   width: 100%;
   background: rgba(15, 23, 42, 0.4);
   backdrop-filter: blur(10px);
-  /* The GlassPanel in parent handles borders, but we ensure layout fills it */
 `;
 
 const HeaderBar = styled.div<{ $isMyTurn: boolean }>`
@@ -274,7 +285,6 @@ const ChatWindow = styled.div`
   gap: 0.5rem;
   scroll-behavior: smooth;
 
-  /* Custom Scrollbar */
   &::-webkit-scrollbar { width: 6px; }
   &::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
   &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
@@ -322,6 +332,7 @@ const MessageRow = styled.div<{ $isMe: boolean }>`
   margin-bottom: 0.25rem;
   animation: ${fadeIn} 0.3s ease-out;
 `;
+
 const SkinScope = styled.div`
   --hue: 0deg;
   --sat: 1;
@@ -359,7 +370,6 @@ const MessageBubble = styled.div<{ $isMe: boolean }>`
   border-radius: 16px;
   position: relative;
   
-  /* Bubble Tail logic */
   border-bottom-left-radius: ${({ $isMe }) => $isMe ? "16px" : "2px"};
   border-bottom-right-radius: ${({ $isMe }) => $isMe ? "2px" : "16px"};
 
