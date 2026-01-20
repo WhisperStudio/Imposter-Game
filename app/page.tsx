@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import styled from "styled-components";
+import styled, { keyframes } from "styled-components";
 import Image from "next/image";
 import { FaCog, FaTimes } from "react-icons/fa";
 import ElectricAvatarPanel from "@/components/ElectricAvatarPanel";
@@ -347,16 +347,18 @@ const handleStartGame = useCallback(async () => {
 
        {/* Top-right player container */}
 <PlayerDock>
-  <ElectricAvatarPanel
-    theme={electricTheme}// eller en fast farge hvis du vil
-    width={isMobile ? 150 : 300}
-    height={isMobile ? 150 : 200}
-    radius={isMobile ? 160 : 60}
-    emberCount={120}
-    speed={1.15}
-    chaos={0.14}
-    lineWidth={1.15}
-  >
+<ElectricAvatarPanel
+  theme={electricTheme}
+  mirror={isMobile}
+  borderRadiusCss={isMobile ? "0 0 160px 160px" : "0 0 0 60px"}
+  width={isMobile ? 300 : 300}
+  height={isMobile ? 150 : 200}
+  radius={isMobile ? 160 : 60}
+  emberCount={120}
+  speed={1.15}
+  chaos={0.14}
+  lineWidth={1.15}
+>
     <PlayerContainerInner>
       <Bar>
         <PlayerWrapper>
@@ -469,6 +471,15 @@ const handleStartGame = useCallback(async () => {
 }
 
 /* ---------------- styled components ---------------- */
+
+const spin = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+`;
 
 const PageContainer = styled.div`
   min-height: 100vh;
@@ -637,7 +648,6 @@ const VoteBadge = styled.div`
     visibility: hidden;
   }
 `;
-
 const SettingsButton = styled.button`
   display: flex;
   width: 60px;
@@ -653,8 +663,9 @@ const SettingsButton = styled.button`
   cursor: pointer;
 
   &:hover {
-    transform: scale(1.1);
+    transform: scale(1.1) rotate(360deg);
     box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+    transition: transform 0.5s ease-in-out, box-shadow 0.3s ease;
   }
   @media (max-width: 768px) {
     position: fixed;

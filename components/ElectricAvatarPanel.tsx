@@ -8,6 +8,7 @@ type ElectricAvatarPanelProps = {
   className?: string;
   children: React.ReactNode;
 
+
   /** Match din PlayerContainer */
   width?: number;  // default 300
   height?: number; // default 200
@@ -21,6 +22,8 @@ type ElectricAvatarPanelProps = {
   speed?: number;          // default 1.2
   chaos?: number;          // default 0.14
   lineWidth?: number;      // default 1.2
+  mirror?: boolean;
+  borderRadiusCss?: string;
 };
 
 
@@ -127,6 +130,8 @@ export default function ElectricAvatarPanel({
   speed = 1.2,
   chaos = 0.14,
   lineWidth = 1.2,
+  mirror = false,
+  borderRadiusCss,
 }: ElectricAvatarPanelProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -159,56 +164,56 @@ export default function ElectricAvatarPanel({
 
     const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 
-    // Spawn langs LEFT, ARC og BOTTOM for bedre “fyll”
     const W = width;
     const H = height;
     const R = Math.min(radius, Math.min(W, H) - 2);
 
-    function spawnPoint() {
+    function spawnLeft() {
       const pick = Math.random();
-
-      // 45% left, 25% arc, 30% bottom
-      if (pick < 0.45) {
-        // left edge (litt unna topp)
-        return { x: -2, y: rand(10, H - (R + 8)) };
-      }
+      if (pick < 0.45) return { x: -2, y: rand(10, H - (R + 8)) };
 
       if (pick < 0.70) {
-        // arc bottom-left (90 -> 180 deg i skjermkoordinater, men vi bruker parametrisering)
-        // Center = (R, H-R)
         const cx = R;
         const cy = H - R;
-
-        // angle går fra PI (venstre) til PI/2 (bunn)
         const ang = Math.PI - rand(0, 1) * (Math.PI / 2);
-
-        // på selve buen (litt utenfor kanten for "spawning")
-        const px = cx + R * Math.cos(ang);
-        const py = cy + R * Math.sin(ang);
-        return { x: px, y: py };
+        return { x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang) };
       }
 
-      // bottom edge
       return { x: rand(R + 6, W - 10), y: H + 2 };
+    }
+
+    function spawnRight() {
+      const pick = Math.random();
+      if (pick < 0.45) return { x: W + 2, y: rand(10, H - (R + 8)) };
+
+      if (pick < 0.70) {
+        const cx = W - R;
+        const cy = H - R;
+        const ang = 0 + rand(0, 1) * (Math.PI / 2); // 0 -> 90deg
+        return { x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang) };
+      }
+
+      return { x: rand(10, W - (R + 6)), y: H + 2 };
     }
 
     for (let i = 0; i < emberCount; i++) {
       const e = document.createElement("div");
       e.className = "ember";
 
-      const { x, y } = spawnPoint();
+      const useRight = mirror ? i % 2 === 1 : false;
+      const p = useRight ? spawnRight() : spawnLeft();
 
       const size = rand(3.2, 9.8);
       const duration = rand(1250, 2900);
       const delay = rand(0, 1800);
 
-      // flyr ned + venstre (variasjon)
-      const dx = rand(-90, -320);
+      // venstre = fly ned/venstre, høyre = fly ned/høyre
+      const dx = useRight ? rand(90, 320) : rand(-90, -320);
       const dy = rand(70, 280);
       const drift = rand(-40, 55);
 
-      e.style.setProperty("--x", `${x}px`);
-      e.style.setProperty("--y", `${y}px`);
+      e.style.setProperty("--x", `${p.x}px`);
+      e.style.setProperty("--y", `${p.y}px`);
       e.style.setProperty("--s", `${size}px`);
       e.style.setProperty("--t", `${duration}ms`);
       e.style.setProperty("--d", `${delay}ms`);
@@ -217,7 +222,8 @@ export default function ElectricAvatarPanel({
 
       embersEl.appendChild(e);
     }
-  }, [emberCount, width, height, radius, theme]);
+  }, [emberCount, width, height, radius, theme, mirror]);
+
 
   // ---------- Electric border (canvas) ----------
   useEffect(() => {
@@ -308,6 +314,56 @@ export default function ElectricAvatarPanel({
 
       return pts;
     };
+        const getLeftBottomRightPoints = (w: number, h: number, r: number, samples: number) => {
+      const pts: Array<{ x: number; y: number }> = [];
+      const rad = Math.max(0, Math.min(r, Math.min(w, h) - 2));
+
+      // left edge (0,0) -> (0, h-rad)
+      const leftStraight = h - rad;
+      const leftSamples = Math.max(18, Math.floor(samples * 0.22));
+      for (let i = 0; i < leftSamples; i++) {
+        const tt = i / leftSamples;
+        pts.push({ x: 0, y: tt * leftStraight });
+      }
+
+      // bottom-left arc
+      const arcL = Math.max(22, Math.floor(samples * 0.12));
+      const cxl = rad;
+      const cyl = h - rad;
+      for (let i = 0; i <= arcL; i++) {
+        const tt = i / arcL;
+        const ang = Math.PI - tt * (Math.PI / 2);
+        pts.push({ x: cxl + rad * Math.cos(ang), y: cyl + rad * Math.sin(ang) });
+      }
+
+      // bottom edge (rad,h) -> (w-rad,h)
+      const bottomStraight = w - rad * 2;
+      const bottomSamples = Math.max(26, Math.floor(samples * 0.32));
+      for (let i = 0; i <= bottomSamples; i++) {
+        const tt = i / bottomSamples;
+        pts.push({ x: rad + tt * bottomStraight, y: h });
+      }
+
+      // bottom-right arc
+      const arcR = Math.max(22, Math.floor(samples * 0.12));
+      const cxr = w - rad;
+      const cyr = h - rad;
+      for (let i = 0; i <= arcR; i++) {
+        const tt = i / arcR;
+        const ang = Math.PI / 2 - tt * (Math.PI / 2); // 90 -> 0
+        pts.push({ x: cxr + rad * Math.cos(ang), y: cyr + rad * Math.sin(ang) });
+      }
+
+      // right edge (w, h-rad) -> (w, 0)
+      const rightSamples = Math.max(18, Math.floor(samples * 0.22));
+      for (let i = 0; i < rightSamples; i++) {
+        const tt = i / rightSamples;
+        pts.push({ x: w, y: (h - rad) - tt * (h - rad) });
+      }
+
+      return pts;
+    };
+
 
     const resizeCanvas = () => {
       const rect = wrap.getBoundingClientRect();
@@ -365,13 +421,17 @@ export default function ElectricAvatarPanel({
         let nx = 0;
         let ny = 0;
 
-        if (p.x <= 0.0001 && p.y <= innerH - rad - 0.0001) {
-          nx = -1;
-          ny = 0;
-        } else if (p.y >= innerH - 0.0001 && p.x >= rad + 0.0001) {
-          nx = 0;
-          ny = 1;
+                if (p.x <= 0.0001 && p.y <= innerH - rad - 0.0001) {
+          // left edge
+          nx = -1; ny = 0;
+        } else if (mirror && p.x >= innerW - 0.0001 && p.y <= innerH - rad - 0.0001) {
+          // right edge
+          nx = 1; ny = 0;
+        } else if (p.y >= innerH - 0.0001 && p.x >= rad + 0.0001 && (!mirror || p.x <= innerW - rad - 0.0001)) {
+          // bottom edge
+          nx = 0; ny = 1;
         } else {
+
           const cx = rad;
           const cy = innerH - rad;
           const vx = p.x - cx;
@@ -382,7 +442,11 @@ export default function ElectricAvatarPanel({
         }
 
         let damp = 1;
-        if (p.x < rad + 0.001 && p.y > innerH - rad - 0.001) damp = cornerDampen;
+                if (p.y > innerH - rad - 0.001) {
+          if (p.x < rad + 0.001) damp = cornerDampen;                 // bottom-left corner
+          if (mirror && p.x > innerW - rad - 0.001) damp = cornerDampen; // bottom-right corner
+        }
+
 
         const x = PAD + p.x + nx * n * displacement * damp;
         const y = PAD + p.y + ny * n * displacement * damp;
@@ -409,7 +473,10 @@ export default function ElectricAvatarPanel({
       const samples = Math.floor(approx / 2.2);
 
       const rad = Math.min(radius, Math.min(innerW, innerH) - 2);
-      const points = getLeftBottomPoints(innerW, innerH, rad, samples);
+            const points = mirror
+        ? getLeftBottomRightPoints(innerW, innerH, rad, samples)
+        : getLeftBottomPoints(innerW, innerH, rad, samples);
+
 
       // glow + crisp
       drawPass(points, t.stroke, lineWidth + 1.6, 0.40, 6.5, innerW, innerH, rad);
@@ -424,7 +491,7 @@ export default function ElectricAvatarPanel({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [theme, width, height, radius, speed, chaos, lineWidth, t.stroke]);
+  }, [theme, width, height, radius, speed, chaos, lineWidth, mirror, t.stroke]);
 
   return (
     <Wrap
@@ -434,7 +501,8 @@ export default function ElectricAvatarPanel({
         ...cssVars,
         width,
         height,
-        borderRadius: `0 0 0 ${radius}px`,
+        borderRadius: borderRadiusCss ?? `0 0 0 ${radius}px`,
+
       }}
     >
       <CanvasLayer aria-hidden="true">
@@ -442,10 +510,12 @@ export default function ElectricAvatarPanel({
       </CanvasLayer>
 
       <GlowLayers aria-hidden="true">
-        <GlowLeft />
-        <GlowBottom />
-        <BgGlow />
-      </GlowLayers>
+  <GlowLeft />
+  {mirror && <GlowRight />}
+  <GlowBottom />
+  <BgGlow />
+</GlowLayers>
+
 
       <Panel>
         <Embers ref={embersRef} aria-hidden="true" />
@@ -506,6 +576,21 @@ const GlowLeft = styled.div`
 
   background: linear-gradient(90deg, var(--glowA) 0%, var(--glowB) 35%, var(--glowC) 100%);
 `;
+const GlowRight = styled.div`
+  position: absolute;
+  pointer-events: none;
+  filter: blur(20px);
+  opacity: 0.55;
+
+  right: -60px;
+  top: -18px;
+  width: 80px;
+  height: calc(100% + 36px);
+  border-radius: 0 0 80px 0;
+
+  background: linear-gradient(270deg, var(--glowA) 0%, var(--glowB) 35%, var(--glowC) 100%);
+`;
+
 
 const GlowBottom = styled.div`
   position: absolute;
