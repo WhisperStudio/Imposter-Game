@@ -1,10 +1,11 @@
-export type AvatarSkin = 'classic' | 'midnight' | 'mint' | 'sunset' | 'cyber';
+import type { AvatarSkin, AvatarType } from "@/firebase/avatarPrefs";
 
 export type Player = {
-  uid: string;        // Firestore doc id
-  playerId: number;   // 101, 102, ...
+  uid: string;
+  playerId: number;
   name: string;
-  avatar: 'astronaut';
+  avatar: string;
   skin: AvatarSkin;
+  avatarType?: AvatarType;
   joinedAt: number;
 };

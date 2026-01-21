@@ -281,88 +281,112 @@ export default function ElectricAvatarPanel({
       }
       return y;
     };
+// ✅ 1) Unngå duplikat-punkter der segmenter møtes (fjerner "hopp" i midten)
+const pushNoDup = (arr: Array<{ x: number; y: number }>, p: { x: number; y: number }) => {
+  const last = arr[arr.length - 1];
+  if (!last) return arr.push(p);
+  if (Math.abs(last.x - p.x) < 0.0001 && Math.abs(last.y - p.y) < 0.0001) return;
+  arr.push(p);
+};
+
+// ✅ 2) Jevn progress basert på faktisk lengde (gir samme chaos over hele kanten)
+const buildArcProgress = (points: Array<{ x: number; y: number }>) => {
+  const acc: number[] = [0];
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x;
+    const dy = points[i].y - points[i - 1].y;
+    total += Math.hypot(dx, dy);
+    acc.push(total);
+  }
+  return { acc, total: Math.max(total, 0.0001) };
+};
+
+    
 
     const getLeftBottomPoints = (w: number, h: number, r: number, samples: number) => {
-      const pts: Array<{ x: number; y: number }> = [];
-      const rad = Math.max(0, Math.min(r, Math.min(w, h) - 2));
+  const pts: Array<{ x: number; y: number }> = [];
+  const rad = Math.max(0, Math.min(r, Math.min(w, h) - 2));
 
-      // left edge: (0,0) -> (0, h-rad)
-      const leftStraight = h - rad;
-      const leftSamples = Math.max(18, Math.floor(samples * (leftStraight / (w + h))));
-      for (let i = 0; i < leftSamples; i++) {
-        const tt = i / leftSamples;
-        pts.push({ x: 0, y: tt * leftStraight });
-      }
+  // left edge
+  const leftStraight = h - rad;
+  const leftSamples = Math.max(22, Math.floor(samples * (leftStraight / (w + h))));
+  for (let i = 0; i <= leftSamples; i++) {
+    const tt = i / leftSamples;
+    pushNoDup(pts, { x: 0, y: tt * leftStraight });
+  }
 
-      // arc bottom-left: center (rad, h-rad), angle PI -> PI/2  ✅ (riktig retning)
-      const arcSamples = Math.max(28, Math.floor(samples * 0.22));
-      const cx = rad;
-      const cy = h - rad;
-      for (let i = 0; i <= arcSamples; i++) {
-        const tt = i / arcSamples;
-        const ang = Math.PI - tt * (Math.PI / 2);
-        pts.push({ x: cx + rad * Math.cos(ang), y: cy + rad * Math.sin(ang) });
-      }
+  // bottom-left arc
+  const arcSamples = Math.max(34, Math.floor(samples * 0.24));
+  const cx = rad;
+  const cy = h - rad;
+  for (let i = 0; i <= arcSamples; i++) {
+    const tt = i / arcSamples;
+    const ang = Math.PI - tt * (Math.PI / 2);
+    pushNoDup(pts, { x: cx + rad * Math.cos(ang), y: cy + rad * Math.sin(ang) });
+  }
 
-      // bottom edge: (rad, h) -> (w, h)
-      const bottomStraight = w - rad;
-      const bottomSamples = Math.max(18, Math.floor(samples * (bottomStraight / (w + h))));
-      for (let i = 0; i <= bottomSamples; i++) {
-        const tt = i / bottomSamples;
-        pts.push({ x: rad + tt * bottomStraight, y: h });
-      }
+  // bottom edge
+  const bottomStraight = w - rad;
+  const bottomSamples = Math.max(26, Math.floor(samples * (bottomStraight / (w + h))));
+  for (let i = 0; i <= bottomSamples; i++) {
+    const tt = i / bottomSamples;
+    pushNoDup(pts, { x: rad + tt * bottomStraight, y: h });
+  }
 
-      return pts;
-    };
-        const getLeftBottomRightPoints = (w: number, h: number, r: number, samples: number) => {
-      const pts: Array<{ x: number; y: number }> = [];
-      const rad = Math.max(0, Math.min(r, Math.min(w, h) - 2));
+  return pts;
+};
 
-      // left edge (0,0) -> (0, h-rad)
-      const leftStraight = h - rad;
-      const leftSamples = Math.max(18, Math.floor(samples * 0.22));
-      for (let i = 0; i < leftSamples; i++) {
-        const tt = i / leftSamples;
-        pts.push({ x: 0, y: tt * leftStraight });
-      }
+const getLeftBottomRightPoints = (w: number, h: number, r: number, samples: number) => {
+  const pts: Array<{ x: number; y: number }> = [];
+  const rad = Math.max(0, Math.min(r, Math.min(w, h) - 2));
 
-      // bottom-left arc
-      const arcL = Math.max(22, Math.floor(samples * 0.12));
-      const cxl = rad;
-      const cyl = h - rad;
-      for (let i = 0; i <= arcL; i++) {
-        const tt = i / arcL;
-        const ang = Math.PI - tt * (Math.PI / 2);
-        pts.push({ x: cxl + rad * Math.cos(ang), y: cyl + rad * Math.sin(ang) });
-      }
+  // left edge
+  const leftStraight = h - rad;
+  const leftSamples = Math.max(22, Math.floor(samples * 0.22));
+  for (let i = 0; i <= leftSamples; i++) {
+    const tt = i / leftSamples;
+    pushNoDup(pts, { x: 0, y: tt * leftStraight });
+  }
 
-      // bottom edge (rad,h) -> (w-rad,h)
-      const bottomStraight = w - rad * 2;
-      const bottomSamples = Math.max(26, Math.floor(samples * 0.32));
-      for (let i = 0; i <= bottomSamples; i++) {
-        const tt = i / bottomSamples;
-        pts.push({ x: rad + tt * bottomStraight, y: h });
-      }
+  // bottom-left arc
+  const arcL = Math.max(28, Math.floor(samples * 0.14));
+  const cxl = rad;
+  const cyl = h - rad;
+  for (let i = 0; i <= arcL; i++) {
+    const tt = i / arcL;
+    const ang = Math.PI - tt * (Math.PI / 2);
+    pushNoDup(pts, { x: cxl + rad * Math.cos(ang), y: cyl + rad * Math.sin(ang) });
+  }
 
-      // bottom-right arc
-      const arcR = Math.max(22, Math.floor(samples * 0.12));
-      const cxr = w - rad;
-      const cyr = h - rad;
-      for (let i = 0; i <= arcR; i++) {
-        const tt = i / arcR;
-        const ang = Math.PI / 2 - tt * (Math.PI / 2); // 90 -> 0
-        pts.push({ x: cxr + rad * Math.cos(ang), y: cyr + rad * Math.sin(ang) });
-      }
+  // bottom edge (rad -> w-rad)
+  const bottomStraight = Math.max(0, w - rad * 2);
+  const bottomSamples = Math.max(34, Math.floor(samples * 0.34));
+  for (let i = 0; i <= bottomSamples; i++) {
+    const tt = i / bottomSamples;
+    pushNoDup(pts, { x: rad + tt * bottomStraight, y: h });
+  }
 
-      // right edge (w, h-rad) -> (w, 0)
-      const rightSamples = Math.max(18, Math.floor(samples * 0.22));
-      for (let i = 0; i < rightSamples; i++) {
-        const tt = i / rightSamples;
-        pts.push({ x: w, y: (h - rad) - tt * (h - rad) });
-      }
+  // bottom-right arc
+  const arcR = Math.max(28, Math.floor(samples * 0.14));
+  const cxr = w - rad;
+  const cyr = h - rad;
+  for (let i = 0; i <= arcR; i++) {
+    const tt = i / arcR;
+    const ang = Math.PI / 2 - tt * (Math.PI / 2);
+    pushNoDup(pts, { x: cxr + rad * Math.cos(ang), y: cyr + rad * Math.sin(ang) });
+  }
 
-      return pts;
-    };
+  // right edge
+  const rightSamples = Math.max(22, Math.floor(samples * 0.22));
+  for (let i = 0; i <= rightSamples; i++) {
+    const tt = i / rightSamples;
+    pushNoDup(pts, { x: w, y: (h - rad) - tt * (h - rad) });
+  }
+
+  return pts;
+};
+
 
 
     const resizeCanvas = () => {
@@ -386,78 +410,96 @@ export default function ElectricAvatarPanel({
     });
     ro.observe(wrap);
 
-    const drawPass = (
-      points: Array<{ x: number; y: number }>,
-      stroke: string,
-      lw: number,
-      alpha: number,
-      blurPx: number,
-      innerW: number,
-      innerH: number,
-      rad: number
-    ) => {
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = lw;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.filter = blurPx > 0 ? `blur(${blurPx}px)` : "none";
+const drawPass = (
+  points: Array<{ x: number; y: number }>,
+  acc: number[],
+  total: number,
+  stroke: string,
+  lw: number,
+  alpha: number,
+  blurPx: number,
+  innerW: number,
+  innerH: number,
+  rad: number
+) => {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = lw;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.filter = blurPx > 0 ? `blur(${blurPx}px)` : "none";
 
-      // 🔧 Finjustering (kan expose som props senere)
-      const displacement = 18;   // hvor langt ut fra kanten
-      const noiseScale = 7.5;    // hvor “hakkete”
-      const cornerDampen = 0.55; // demp i buen
+  // ✅ mer energi når mirror=true (mobil)
+  const displacement = mirror ? 24 : 18;
+  const noiseScale = mirror ? 9.25 : 7.5;
+  const cornerDampen = 0.55;
+  const eps = 0.0001;
 
-      ctx.beginPath();
+  ctx.beginPath();
 
-      for (let i = 0; i < points.length; i++) {
-        const p = points[i];
-        const progress = i / (points.length - 1);
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
 
-        const n = octavedNoise(progress * noiseScale, 7, 1.7, 0.62, chaos, 9, time, 0);
+    // ✅ jevn progress basert på faktisk path-lengde
+    const progress = acc[i] / total;
 
-        // normal (utover) – kun left + arc + bottom
-        let nx = 0;
-        let ny = 0;
+    const n = octavedNoise(progress * noiseScale, 7, 1.7, 0.62, chaos, 9, time, 0);
 
-                if (p.x <= 0.0001 && p.y <= innerH - rad - 0.0001) {
-          // left edge
-          nx = -1; ny = 0;
-        } else if (mirror && p.x >= innerW - 0.0001 && p.y <= innerH - rad - 0.0001) {
-          // right edge
-          nx = 1; ny = 0;
-        } else if (p.y >= innerH - 0.0001 && p.x >= rad + 0.0001 && (!mirror || p.x <= innerW - rad - 0.0001)) {
-          // bottom edge
-          nx = 0; ny = 1;
-        } else {
+    let nx = 0;
+    let ny = 0;
 
-          const cx = rad;
-          const cy = innerH - rad;
-          const vx = p.x - cx;
-          const vy = p.y - cy;
-          const len = Math.max(0.0001, Math.hypot(vx, vy));
-          nx = vx / len;
-          ny = vy / len;
-        }
+    const isLeftEdge = p.x <= eps && p.y <= innerH - rad - eps;
+    const isRightEdge = mirror && p.x >= innerW - eps && p.y <= innerH - rad - eps;
 
-        let damp = 1;
-                if (p.y > innerH - rad - 0.001) {
-          if (p.x < rad + 0.001) damp = cornerDampen;                 // bottom-left corner
-          if (mirror && p.x > innerW - rad - 0.001) damp = cornerDampen; // bottom-right corner
-        }
+    const isBottomEdge =
+      p.y >= innerH - eps &&
+      p.x >= rad + eps &&
+      (!mirror || p.x <= innerW - rad - eps);
 
+    const inBottomZone = p.y > innerH - rad - eps;
 
-        const x = PAD + p.x + nx * n * displacement * damp;
-        const y = PAD + p.y + ny * n * displacement * damp;
+    if (isLeftEdge) {
+      nx = -1; ny = 0;
+    } else if (isRightEdge) {
+      nx = 1; ny = 0;
+    } else if (isBottomEdge) {
+      nx = 0; ny = 1;
+    } else {
+      // ✅ arc: riktig center på venstre/høyre bue
+      let cx = rad;
+      let cy = innerH - rad;
 
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      if (mirror && inBottomZone && p.x > innerW - rad - eps) {
+        cx = innerW - rad; // høyre bue
+      } else {
+        cx = rad;          // venstre bue
       }
 
-      ctx.stroke();
-      ctx.restore();
-    };
+      const vx = p.x - cx;
+      const vy = p.y - cy;
+      const len = Math.max(0.0001, Math.hypot(vx, vy));
+      nx = vx / len;
+      ny = vy / len;
+    }
+
+    let damp = 1;
+    if (inBottomZone) {
+      if (p.x < rad + eps) damp = cornerDampen;
+      if (mirror && p.x > innerW - rad - eps) damp = cornerDampen;
+    }
+
+    const x = PAD + p.x + nx * n * displacement * damp;
+    const y = PAD + p.y + ny * n * displacement * damp;
+
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+
+  ctx.stroke();
+  ctx.restore();
+};
+
 
     const animate = (now: number) => {
       const dt = (now - last) / 1000;
@@ -479,8 +521,12 @@ export default function ElectricAvatarPanel({
 
 
       // glow + crisp
-      drawPass(points, t.stroke, lineWidth + 1.6, 0.40, 6.5, innerW, innerH, rad);
-      drawPass(points, t.stroke, lineWidth, 0.90, 0, innerW, innerH, rad);
+      const { acc, total } = buildArcProgress(points);
+
+// glow + crisp
+drawPass(points, acc, total, t.stroke, lineWidth + 1.6, 0.40, 6.5, innerW, innerH, rad);
+drawPass(points, acc, total, t.stroke, lineWidth,        0.90, 0,   innerW, innerH, rad);
+
 
       raf = requestAnimationFrame(animate);
     };

@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   onSnapshot,
   query,
   orderBy,
@@ -52,15 +53,18 @@ export async function createLobby(inviteCode: string, host: Player) {
   );
 
   await setDoc(
-    doc(db, "lobbies", inviteCode, "players", host.uid),
-    {
-      playerId: 100,
-      name: host.name,
-      avatar: host.avatar,
-      joinedAt: host.joinedAt ?? Date.now(),
-    },
-    { merge: true }
-  );
+  doc(db, "lobbies", inviteCode, "players", host.uid),
+  {
+    playerId: 100,
+    name: host.name,
+    avatar: host.avatar,
+    skin: host.skin ?? "classic",
+    avatarType: host.avatarType ?? "classicAstronaut",
+    joinedAt: host.joinedAt ?? Date.now(),
+  },
+  { merge: true }
+);
+
 }
 
 
@@ -100,7 +104,15 @@ export async function setLobbyTheme(inviteCode: string, hostUid: string, themeId
   });
 }
 
-
+export async function updatePlayerPrefs(
+  inviteCode: string,
+  uid: string,
+  avatarType: string,
+  skin: string
+) {
+  const ref = doc(db, "lobbies", inviteCode, "players", uid);
+  await updateDoc(ref, { avatarType, skin });
+}
 /* -------- START GAME (UPDATED FOR CATEGORY HINT) -------- */
 export async function startGame(
   inviteCode: string,
@@ -193,13 +205,16 @@ export async function joinLobby(inviteCode: string, player: Player) {
     if (existingPlayerSnap.exists()) {
       // Just merge updates (name/avatar) without changing id/joinedAt unless you want to
       tx.set(
-        playerRef,
-        {
-          name: player.name,
-          avatar: player.avatar,
-        },
-        { merge: true }
-      );
+  playerRef,
+  {
+    name: player.name,
+    avatar: player.avatar,
+    skin: player.skin ?? "classic",
+    avatarType: player.avatarType ?? "classicAstronaut",
+  },
+  { merge: true }
+);
+
       return;
     }
 
@@ -219,15 +234,18 @@ export async function joinLobby(inviteCode: string, player: Player) {
 
     // create player doc
     tx.set(
-      playerRef,
-      {
-        playerId: assignedId,
-        name: player.name,
-        avatar: player.avatar,
-        joinedAt: player.joinedAt ?? Date.now(),
-      },
-      { merge: true }
-    );
+  playerRef,
+  {
+    playerId: assignedId,
+    name: player.name,
+    avatar: player.avatar,
+    skin: player.skin ?? "classic",
+    avatarType: player.avatarType ?? "classicAstronaut",
+    joinedAt: player.joinedAt ?? Date.now(),
+  },
+  { merge: true }
+);
+
   });
 }
 export async function goToChatPhase(inviteCode: string, hostUid: string) {

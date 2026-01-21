@@ -103,7 +103,6 @@ export default function Lobby({
     }
   };
  
-
   return (
     <LobbyContainer>
       <h2 style={{ fontSize: "2.5rem", color: "#e2e8f0", marginBottom: "1rem", textAlign: "center" }}>
@@ -113,20 +112,24 @@ export default function Lobby({
       {/* PLAYERS always visible in room mode, optional in menu mode */}
       {mode === "room" && (
         <PlayersGrid>
-          {players.map((player) => (
-            <PlayerCard key={player.uid}>
-              <AvatarSkinScope skin={player.uid === uid ? skin : "classic"}>
-                <PlayerAvatar type={player.uid === uid ? avatarType : "classicAstronaut"} size={isMobile ? 50 : 80} />
-              </AvatarSkinScope>
+          {players.map((player) => {
+  const effectiveSkin = player.uid === uid ? skin : (player.skin ?? "classic");
+  const effectiveType = player.uid === uid ? avatarType : (player.avatarType ?? "classicAstronaut");
 
+  return (
+    <PlayerCard key={player.uid}>
+      <AvatarSkinScope skin={effectiveSkin as any}>
+        <PlayerAvatar type={effectiveType as any} size={isMobile ? 50 : 80} />
+      </AvatarSkinScope>
 
+      <PlayerName className={player.playerId === 100 ? "host" : ""}>
+        {player.name}
+        {player.playerId === 100 && " (Host)"}
+      </PlayerName>
+    </PlayerCard>
+  );
+})}
 
-              <PlayerName className={player.playerId === 100 ? "host" : ""}>
-                {player.name}
-                {player.playerId === 100 && " (Host)"}
-              </PlayerName>
-            </PlayerCard>
-          ))}
         </PlayersGrid>
       )}
 

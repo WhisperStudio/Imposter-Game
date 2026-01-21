@@ -16,7 +16,7 @@ import AvatarSkinScope from "@/components/avatars/AvatarSkinScope";
 
 
 import type { Player } from "@/types/player";
-import { createLobby, joinLobby, listenToLobby, listenToLobbyPlayers, startGame, leaveLobby, closeLobby } from "@/firebase/lobby";
+import { createLobby, joinLobby, listenToLobby, listenToLobbyPlayers, startGame, leaveLobby, closeLobby,updatePlayerPrefs } from "@/firebase/lobby";
 
 import { useTheme } from "@/components/ThemeContext";
 
@@ -125,6 +125,10 @@ const [myPlayer, setMyPlayer] = useState<Player | null>(null);
     setSkin(readSkin(uid));
     setElectricTheme(readElectricTheme(uid));
   }, [uid]);
+useEffect(() => {
+  if (!inviteCode || !myPlayer?.uid) return;
+  updatePlayerPrefs(inviteCode, myPlayer.uid, avatarType, skin).catch(console.error);
+}, [inviteCode, myPlayer?.uid, avatarType, skin]);
 
   
 useEffect(() => {
@@ -154,13 +158,15 @@ const setupLobby = useCallback(
 
     if (!myPlayer || !myPlayer.uid) {
       player = {
-        uid, // ✅ viktig
-        playerId: 0,
-        name: `Player ${Math.floor(100 + Math.random() * 900)}`,
-        avatar: "astronaut",
-        skin: "classic",
-        joinedAt: Date.now(),
-      };
+  uid,
+  playerId: 0,
+  name: `Player ${Math.floor(100 + Math.random() * 900)}`,
+  avatar: "astronaut",
+  skin,                 // ✅ bruk valgt skin
+  avatarType,           // ✅ bruk valgt avatarType
+  joinedAt: Date.now(),
+};
+
       setMyPlayer(player);
     } else {
       // ✅ tving korrekt uid hvis den av en eller annen grunn er feil/blank
@@ -192,7 +198,7 @@ const setupLobby = useCallback(
       return;
     }
   },
-  [uid, myPlayer]
+  [uid, myPlayer, avatarType, skin]
 );
 
 
