@@ -112,9 +112,9 @@ export default function ChatPanel({
         <HeaderContent>
             <StatusLight $active={isMyTurn && !readOnly} />
             <div style={{lineHeight: 1}}>
-                <div style={{fontSize: '0.6rem', color: '#64748b', letterSpacing: '2px'}}>NOOSPHERE LINK</div>
+                <div style={{fontSize: '0.6rem', color: '#64748b', letterSpacing: '2px'}}>VINTRA NETWORK</div>
                 <div style={{fontSize: '0.9rem', color: '#fff', fontWeight: 'bold'}}>
-                    {readOnly ? "ARCHIVE REVIEW" : "LIVE FEED"}
+                    {readOnly ? "ARCHIVE REVIEW" : "LIVE CHAT"}
                 </div>
             </div>
         </HeaderContent>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import styled, { keyframes, css } from "styled-components";
 import type { Player } from "@/types/player";
 import { readSkin, readType, type AvatarSkin, type AvatarType } from "@/firebase/avatarPrefs";
@@ -11,6 +11,22 @@ import ChatPanel from "@/components/ChatPanel";
 import VotePanel from "@/components/VotePanel";
 import ResultPanel from "@/components/ResultPanel";
 import { goToChatPhase } from "@/firebase/lobby";
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const update = () => setIsMobile(mq.matches);
+
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
 
 // --- Types ---
 type GameData = {
@@ -37,6 +53,7 @@ type GameProps = {
   game: GameData | null | undefined;
   isHost: boolean;
   hostUid: string;
+  
 };
 
 export default function Game({ inviteCode, players, myUid, game, isHost, hostUid }: GameProps) {
@@ -61,8 +78,23 @@ export default function Game({ inviteCode, players, myUid, game, isHost, hostUid
   const word = game?.word;
   const hint = game?.imposterHint;
   const phase = game?.phase ?? "reveal";
+  const isMobile = useIsMobile();
+const showMiniCardInChatMobile = isMobile && phase === "chat";
+
 
   const [cardFlipped, setCardFlipped] = useState(false);
+
+  const avatarTypeByUid = useMemo(() => {
+  const out: Record<string, AvatarType> = {};
+  players.forEach((p) => (out[p.uid] = readType(p.uid)));
+  return out;
+}, [players]);
+
+const skinByUid = useMemo(() => {
+  const out: Record<string, AvatarSkin> = {};
+  players.forEach((p) => (out[p.uid] = readSkin(p.uid)));
+  return out;
+}, [players]);
 
   if (!role) return <LoadingScreen>Initializing Neural Link...</LoadingScreen>;
 
@@ -115,22 +147,51 @@ export default function Game({ inviteCode, players, myUid, game, isHost, hostUid
     </PerspectiveContainer>
   )}
 
-  {/* ✅ Chat skal ligge her */}
-  {phase === "chat" && game?.chat && (
-    <GlassPanel>
-      <ChatPanel inviteCode={inviteCode} myUid={myUid} players={players} chat={game.chat} />
-    </GlassPanel>
-  )}
+  {/* ✅ Chat skal ligge her (tar plassen der flipkortet var) */}
+{phase === "chat" && game?.chat && (
+  <>
+    {showMiniCardInChatMobile && (
+      <RoleMiniCard $isImposter={isImposter} $compact>
+        <RoleMiniTop>
+          <RoleMiniTag>{"ROLE - "}</RoleMiniTag>
+          <RoleMiniTitle>{isImposter ? "IMPOSTER" : "CREW"}</RoleMiniTitle>
+        </RoleMiniTop>
 
-  {/* ✅ Vote Panel - Nå med chat-prop sendt inn */}
+        <RoleMiniBody>
+          {isImposter ? (
+            <>
+              <MiniLabel>Hint - </MiniLabel>
+              <MiniValue>{hint ?? "Blend in"}</MiniValue>
+            </>
+          ) : (
+            <>
+              <MiniLabel>Word - </MiniLabel>
+              <MiniValue>{word ?? "???"}</MiniValue>
+            </>
+          )}
+        </RoleMiniBody>
+      </RoleMiniCard>
+    )}
+
+    <GlassPanel>
+      <ChatPanel
+        inviteCode={inviteCode}
+        myUid={myUid}
+        players={players}
+        chat={game.chat}
+        avatarTypeByUid={avatarTypeByUid}
+        skinByUid={skinByUid}
+        avatarSize={26}
+        secretWord={game.word ?? null}
+        isImposter={isImposter}
+      />
+    </GlassPanel>
+  </>
+)}
+
+
   {phase === "vote" && (
-    <VotePanel 
-        inviteCode={inviteCode} 
-        myUid={myUid} 
-        players={players} 
-        votes={game?.votes ?? {}} 
-        chat={game?.chat} // <--- Sender chatten videre slik at VotePanel kan vise review
-    />
+    <VotePanel inviteCode={inviteCode} myUid={myUid} players={players} votes={game?.votes ?? {}} />
   )}
 
   {phase === "result" && game?.result && game?.imposterUid && (
@@ -162,28 +223,29 @@ export default function Game({ inviteCode, players, myUid, game, isHost, hostUid
 
         {/* --- RIGHT COLUMN: CREW MANIFEST --- */}
         <SideColumn>
-          {phase !== "reveal" && (
-    <RoleMiniCard $isImposter={isImposter}>
-      <RoleMiniTop>
-        <RoleMiniTitle>{isImposter ? "IMPOSTER" : "CREW"}</RoleMiniTitle>
-        <RoleMiniTag>{isImposter ? "COVERT" : "CONFIRMED"}</RoleMiniTag>
-      </RoleMiniTop>
+{phase !== "reveal" && !showMiniCardInChatMobile && (
+  <RoleMiniCard $isImposter={isImposter}>
+    <RoleMiniTop>
+      <RoleMiniTag>{"ROLE - "}</RoleMiniTag>
+      <RoleMiniTitle>{isImposter ? "IMPOSTER" : "CREW"}</RoleMiniTitle>
+    </RoleMiniTop>
 
-      <RoleMiniBody>
-        {isImposter ? (
-          <>
-            <MiniLabel>Hint</MiniLabel>
-            <MiniValue>{hint ?? "Blend in"}</MiniValue>
-          </>
-        ) : (
-          <>
-            <MiniLabel>Word</MiniLabel>
-            <MiniValue>{word ?? "???"}</MiniValue>
-          </>
-        )}
-      </RoleMiniBody>
-    </RoleMiniCard>
-  )}
+    <RoleMiniBody>
+      {isImposter ? (
+        <>
+          <MiniLabel>Hint - </MiniLabel>
+          <MiniValue>{hint ?? "Blend in"}</MiniValue>
+        </>
+      ) : (
+        <>
+          <MiniLabel>Word - </MiniLabel>
+          <MiniValue>{word ?? "???"}</MiniValue>
+        </>
+      )}
+    </RoleMiniBody>
+  </RoleMiniCard>
+)}
+
           <CrewManifest>
             <ManifestTitle>CREW MANIFEST</ManifestTitle>
             <CrewList>
@@ -266,6 +328,10 @@ const HudHeader = styled.header`
   backdrop-filter: blur(12px);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
+
+  @media (max-width: 768px) {
+    visibility: hidden;
+  }
 `;
 
 const GameStatusBadge = styled.div`
@@ -414,7 +480,7 @@ const RoleTitle = styled.h2`
   margin: 0 0 1.5rem 0;
   letter-spacing: 1px;
 `;
-const RoleMiniCard = styled.div<{ $isImposter: boolean }>`
+const RoleMiniCard = styled.div<{ $isImposter: boolean; $compact?: boolean }>`
   width: 100%;
   margin-bottom: 1rem;
   border-radius: 16px;
@@ -425,12 +491,34 @@ const RoleMiniCard = styled.div<{ $isImposter: boolean }>`
       : "linear-gradient(145deg, rgba(12, 74, 110, 0.75), rgba(3, 105, 161, 0.55))"};
   border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(10px);
+
+    ${({ $compact }) =>
+    $compact &&
+    css`
+      padding: 0.75rem;
+      border-radius: 14px;
+      margin-bottom: -1rem;
+
+      ${RoleMiniTitle} {
+        font-size: 0.85rem;
+        letter-spacing: 1.2px;
+      }
+
+      ${RoleMiniTag} {
+        font-size: 0.65rem;
+        padding: 3px 7px;
+      }
+
+      ${MiniValue} {
+        font-size: 1rem;
+      }
+    `}
+
 `;
 
 const RoleMiniTop = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
 `;
@@ -442,18 +530,20 @@ const RoleMiniTitle = styled.div`
 `;
 
 const RoleMiniTag = styled.div`
-  font-size: 0.7rem;
+  font-size: 1.15rem;
   letter-spacing: 2px;
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(0,0,0,0.25);
-  border: 1px solid rgba(255,255,255,0.10);
+  
+
   color: rgba(255,255,255,0.8);
 `;
 
 const RoleMiniBody = styled.div`
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
 `;
 
 const MiniLabel = styled.div`

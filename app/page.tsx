@@ -499,6 +499,9 @@ const PageContainer = styled.div`
   z-index: 2;
   box-sizing: border-box;
   overflow: hidden;
+  @media (max-width: 768px) {
+    padding: 0rem;
+  }
 `;
 
 const StarBackground = styled.div`
