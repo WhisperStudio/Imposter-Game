@@ -2,6 +2,8 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
+  where, limit,
   updateDoc,
   onSnapshot,
   query,
@@ -31,41 +33,49 @@ import type { Player } from "@/types/player";
  */
 
 /* -------- CREATE -------- */
-
 export async function createLobby(inviteCode: string, host: Player) {
-  if (!inviteCode) throw new Error("createLobby: missing inviteCode");
-  if (!host?.uid) throw new Error("createLobby: host.uid is missing");
   const lobbyRef = doc(db, "lobbies", inviteCode);
+  const newSessionId = crypto.randomUUID();
 
-  // ✅ TTL: 10 timer fra nå
-  const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 60 * 1000);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(lobbyRef);
+    const existing = snap.exists() ? (snap.data() as any) : null;
 
-  await setDoc(
-    lobbyRef,
-    {
+    if (existing && existing.status && existing.status !== "closed") {
+      throw new Error("Lobby code is currently in use");
+    }
+
+    // IKKE bruk deleteField her (siden du bruker tx.set uten merge)
+    // Bare overskriv hele dokumentet rent.
+    tx.set(lobbyRef, {
       createdAt: serverTimestamp(),
       status: "waiting",
       hostId: host.uid,
       nextPlayerNumber: 101,
-      expiresAt, // ✅ TTL field
+      sessionId: newSessionId,
+      closedAt: null,
+      settings: null,
+      game: null,
+    });
+  });
+
+  await setDoc(
+    doc(db, "lobbies", inviteCode, "players", host.uid),
+    {
+      sessionId: newSessionId,
+      playerId: 100,
+      name: host.name,
+      avatar: host.avatar,
+      skin: host.skin ?? "classic",
+      avatarType: host.avatarType ?? "classicAstronaut",
+      joinedAt: host.joinedAt ?? Date.now(),
     },
     { merge: true }
   );
 
-  await setDoc(
-  doc(db, "lobbies", inviteCode, "players", host.uid),
-  {
-    playerId: 100,
-    name: host.name,
-    avatar: host.avatar,
-    skin: host.skin ?? "classic",
-    avatarType: host.avatarType ?? "classicAstronaut",
-    joinedAt: host.joinedAt ?? Date.now(),
-  },
-  { merge: true }
-);
-
+  return newSessionId;
 }
+
 
 
 export function listenToLobby(inviteCode: string, callback: (lobby: DocumentData | null) => void) {
@@ -79,6 +89,18 @@ export function listenToLobby(inviteCode: string, callback: (lobby: DocumentData
 
     callback(snapshot.data());
   });
+}
+export async function findReusableLobby(): Promise<string | null> {
+  const q = query(
+    collection(db, "lobbies"),
+    where("status", "==", "closed"),
+    limit(1)
+  );
+
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+
+  return snap.docs[0].id; // inviteCode
 }
 
 export async function setLobbyTheme(inviteCode: string, hostUid: string, themeId: string) {
@@ -181,73 +203,60 @@ export async function startGame(
 
 
 /* -------- JOIN (SAFE PLAYER ID) -------- */
-
 export async function joinLobby(inviteCode: string, player: Player) {
   if (!inviteCode) throw new Error("joinLobby: missing inviteCode");
   if (!player?.uid) throw new Error("joinLobby: player.uid is missing");
+
   const lobbyRef = doc(db, "lobbies", inviteCode);
   const playerRef = doc(db, "lobbies", inviteCode, "players", player.uid);
 
-  // Transaction prevents two users getting same playerId
-  await runTransaction(db, async (tx: Transaction) => {
+  await runTransaction(db, async (tx) => {
     const lobbySnap = await tx.get(lobbyRef);
-    if (!lobbySnap.exists()) {
-      throw new Error("Lobby does not exist");
-    }
+    if (!lobbySnap.exists()) throw new Error("Lobby does not exist");
 
     const lobbyData = lobbySnap.data() as any;
-    if (lobbyData?.status && lobbyData.status !== "waiting") {
-      throw new Error("Game already started");
+
+    if (lobbyData.status !== "waiting") {
+      throw new Error("Lobby is not joinable");
     }
 
-    // If player already exists, do not re-assign id (idempotent)
-    const existingPlayerSnap = await tx.get(playerRef);
-    if (existingPlayerSnap.exists()) {
-      // Just merge updates (name/avatar) without changing id/joinedAt unless you want to
-      tx.set(
-  playerRef,
-  {
-    name: player.name,
-    avatar: player.avatar,
-    skin: player.skin ?? "classic",
-    avatarType: player.avatarType ?? "classicAstronaut",
-  },
-  { merge: true }
-);
+    const sessionId = lobbyData.sessionId;
+    if (!sessionId) throw new Error("Lobby session missing");
 
+    const existingPlayerSnap = await tx.get(playerRef);
+
+    // Hvis player-doc finnes men er fra gammel session -> overskriv som ny join
+    const existing = existingPlayerSnap.exists() ? (existingPlayerSnap.data() as any) : null;
+    const isSameSession = existing?.sessionId === sessionId;
+
+    if (existingPlayerSnap.exists() && isSameSession) {
+      tx.set(playerRef, {
+        name: player.name,
+        avatar: player.avatar,
+        skin: player.skin ?? "classic",
+        avatarType: player.avatarType ?? "classicAstronaut",
+      }, { merge: true });
       return;
     }
 
     const next = typeof lobbyData.nextPlayerNumber === "number" ? lobbyData.nextPlayerNumber : 101;
+    const assignedId = next;
 
-    // assign new id
-    const assignedId = player.playerId && player.playerId === 100 ? 100 : next;
+    tx.set(lobbyRef, { nextPlayerNumber: next + 1 }, { merge: true });
 
-    // update lobby counter only for non-host joiners
-    if (assignedId !== 100) {
-      tx.set(
-        lobbyRef,
-        { nextPlayerNumber: next + 1 },
-        { merge: true }
-      );
-    }
-
-    // create player doc
-    tx.set(
-  playerRef,
-  {
-    playerId: assignedId,
-    name: player.name,
-    avatar: player.avatar,
-    skin: player.skin ?? "classic",
-    avatarType: player.avatarType ?? "classicAstronaut",
-    joinedAt: player.joinedAt ?? Date.now(),
-  },
-  { merge: true }
-);
-
+    tx.set(playerRef, {
+      sessionId,
+      playerId: assignedId,
+      name: player.name,
+      avatar: player.avatar,
+      skin: player.skin ?? "classic",
+      avatarType: player.avatarType ?? "classicAstronaut",
+      joinedAt: player.joinedAt ?? Date.now(),
+    });
   });
 }
+
+
 export async function goToChatPhase(inviteCode: string, hostUid: string) {
   const lobbyRef = doc(db, "lobbies", inviteCode);
 
@@ -488,7 +497,6 @@ export async function resetGame(inviteCode: string, hostUid: string) {
   });
 }
 
-
 export async function closeLobby(inviteCode: string, hostUid: string) {
   const lobbyRef = doc(db, "lobbies", inviteCode);
 
@@ -497,20 +505,22 @@ export async function closeLobby(inviteCode: string, hostUid: string) {
     if (!snap.exists()) return;
 
     const data = snap.data() as any;
-    if (data.hostId !== hostUid) return; // kun host kan close
+    if (data.hostId !== hostUid) return;
 
-    // ✅ sett expiresAt til "nå" så TTL fjerner den så fort som mulig
-    tx.set(
-      lobbyRef,
-      {
-        status: "closed",
-        closedAt: serverTimestamp(),
-        expiresAt: Timestamp.fromMillis(Date.now()),
-      },
-      { merge: true }
-    );
+    // ✅ update støtter deleteField uten merge-krav
+    tx.update(lobbyRef, {
+      status: "closed",
+      closedAt: serverTimestamp(),
+      game: deleteField(),
+      settings: deleteField(),
+      nextPlayerNumber: 101,
+      hostId: "",
+    });
   });
 }
+
+
+
 export async function leaveLobby(inviteCode: string, uid: string) {
   const lobbyRef = doc(db, "lobbies", inviteCode);
   const playerRef = doc(db, "lobbies", inviteCode, "players", uid);
@@ -564,31 +574,26 @@ export async function leaveLobby(inviteCode: string, uid: string) {
 
 /* -------- REALTIME LISTENER -------- */
 
-export function listenToLobbyPlayers(inviteCode: string, callback: (players: Player[]) => void) {
-  // Add validation for inviteCode
-  if (!inviteCode || typeof inviteCode !== 'string' || inviteCode.trim() === '') {
-    console.error('Invalid invite code:', inviteCode);
+export function listenToLobbyPlayers(
+  inviteCode: string,
+  sessionId: string,
+  callback: (players: Player[]) => void
+) {
+  if (!inviteCode || !sessionId) {
     callback([]);
-    return () => { }; // Return a no-op function for consistency
+    return () => {};
   }
 
-  try {
-    const q = query(
-      collection(db, "lobbies", inviteCode, "players"),
-      orderBy("joinedAt", "asc")
-    );
+  const q = query(
+    collection(db, "lobbies", inviteCode, "players"),
+    orderBy("joinedAt", "asc")
+  );
 
-    return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-      const players: Player[] = snapshot.docs.map((d) => ({
-        uid: d.id,
-        ...(d.data() as Omit<Player, "uid">),
-      }));
+  return onSnapshot(q, (snapshot) => {
+    const players: Player[] = snapshot.docs
+      .map((d) => ({ uid: d.id, ...(d.data() as any) }))
+      .filter((p: any) => p.sessionId === sessionId);
 
-      callback(players);
-    });
-  } catch (error) {
-    console.error('Error setting up lobby players listener:', error);
-    callback([]);
-    return () => { }; // Return a no-op function for consistency
-  }
+    callback(players);
+  });
 }

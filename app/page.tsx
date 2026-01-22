@@ -17,7 +17,7 @@ import AvatarSkinScope from "@/components/avatars/AvatarSkinScope";
 
 import type { Player } from "@/types/player";
 import { createLobby, joinLobby, listenToLobby, listenToLobbyPlayers, startGame, leaveLobby, closeLobby,updatePlayerPrefs } from "@/firebase/lobby";
-
+import { findReusableLobby } from "@/firebase/lobby";
 import { useTheme } from "@/components/ThemeContext";
 
 import { readSkin, readType, readElectricTheme, type AvatarSkin, type AvatarType } from "@/firebase/avatarPrefs";
@@ -88,7 +88,7 @@ export default function Home() {
 
   const [lobby, setLobby] = useState<any | null>(null);
   const isMobile = useIsMobile();
-
+const [expectedSessionId, setExpectedSessionId] = useState<string | null>(null);
   const [lobbyPlayers, setLobbyPlayers] = useState<Player[]>([]);
 const [myPlayer, setMyPlayer] = useState<Player | null>(null);
 
@@ -152,7 +152,7 @@ useEffect(() => {
   };
 
 const setupLobby = useCallback(
-  async (isNewGame = false, codeToJoin?: string) => {
+  async (isNewGame = false, forcedCode?: string) => {
     // ✅ alltid sørg for at player har korrekt uid
     let player: Player;
 
@@ -175,53 +175,56 @@ const setupLobby = useCallback(
     }
 
     if (isNewGame) {
-      const host: Player = { ...player, uid, playerId: 100, joinedAt: Date.now() };
-      setMyPlayer(host);
+  const host: Player = { ...player, uid, playerId: 100, joinedAt: Date.now() };
+  setMyPlayer(host);
 
-      const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      const code = Array.from({ length: 6 }, () => characters[Math.floor(Math.random() * characters.length)]).join("");
+  const code = forcedCode!;
+  const sessionId = await createLobby(code, host);
 
-      await createLobby(code, host);
+  setExpectedSessionId(sessionId);
+  setInviteCode(code);
+  setIsHost(true);
+  return;
+}
 
-      setInviteCode(code);
-      setIsHost(true);
-      return;
-    }
 
-    if (codeToJoin) {
-      const joiner: Player = { ...player, uid, playerId: 0, joinedAt: Date.now() };
-      await joinLobby(codeToJoin, joiner);
 
-      setMyPlayer(joiner);
-      setInviteCode(codeToJoin);
-      setIsHost(false);
-      return;
-    }
+    if (!isNewGame && forcedCode) {
+  const joiner: Player = { ...player, uid, playerId: 0, joinedAt: Date.now() };
+  await joinLobby(forcedCode, joiner);
+
+  setMyPlayer(joiner);
+  setInviteCode(forcedCode);
+  setIsHost(false);
+  return;
+}
+
   },
   [uid, myPlayer, avatarType, skin]
 );
 
-
- const handleCreateGame = useCallback(async () => {
+const handleCreateGame = useCallback(async () => {
   if (isCreating) return;
   setIsCreating(true);
 
   try {
-    // ✅ close previous lobby from this browser (TTL will delete)
-    const last = typeof window !== "undefined" ? localStorage.getItem("imposter_last_lobby") : null;
-    if (last && myPlayer?.uid) {
-      await closeLobby(last, myPlayer.uid).catch(() => {});
+    let code: string | null = await findReusableLobby();
+
+    if (!code) {
+      // ❌ ingen ledig → lag ny
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      code = Array.from({ length: 6 }, () =>
+        chars[Math.floor(Math.random() * chars.length)]
+      ).join("");
     }
 
-    await setupLobby(true);
-
-    // ✅ store current lobby code as last
-    // (setupLobby(true) setter inviteCode via setInviteCode, men vi har ikke den direkte her.
-    // Vi lagrer i en effect under når inviteCode endres.)
+    await setupLobby(true, code);
+  } catch (e) {
+    console.error(e);
   } finally {
     setIsCreating(false);
   }
-}, [setupLobby, isCreating, myPlayer]);
+}, [setupLobby, isCreating]);
 
 
   const handleJoinGame = useCallback(
@@ -239,17 +242,23 @@ const setupLobby = useCallback(
     [setupLobby, isCreating]
   );
 
-  // listen players
-  useEffect(() => {
-    // Only proceed if inviteCode is a non-empty string with exactly 6 uppercase alphanumeric characters
-    if (!inviteCode || typeof inviteCode !== 'string' || !/^[A-Z0-9]{6}$/.test(inviteCode)) {
-      setLobbyPlayers([]);
-      return;
-    }
-    
-    const unsub = listenToLobbyPlayers(inviteCode, setLobbyPlayers);
-    return () => unsub();
-  }, [inviteCode]);
+ // listen players (session-safe)
+useEffect(() => {
+  if (!inviteCode || !expectedSessionId) {
+    setLobbyPlayers([]);
+    return;
+  }
+
+  const unsub = listenToLobbyPlayers(
+    inviteCode,
+    expectedSessionId,
+    setLobbyPlayers
+  );
+
+  return () => unsub();
+}, [inviteCode, expectedSessionId]);
+
+
 
   // listen lobby
   useEffect(() => {
@@ -261,29 +270,36 @@ const setupLobby = useCallback(
       return;
     }
 
-    const unsub = listenToLobby(inviteCode, (l) => {
-    // hvis lobby-dokumentet er slettet
-    if (!l) {
-      setShowThemes(false);
-      setInviteCode("");
-      setLobby(null);
-      setLobbyPlayers([]);
-      setIsHost(false);
-      return;
-    }
+const unsub = listenToLobby(inviteCode, (l) => {
+  if (!l) {
+    setShowThemes(false);
+    setInviteCode("");
+    setLobby(null);
+    setLobbyPlayers([]);
+    setIsHost(false);
+    setExpectedSessionId(null);
+    return;
+  }
 
-    // hvis lobby er closed
-    if (l.status === "closed") {
-      setShowThemes(false);
-      setInviteCode("");
-      setLobby(null);
-      setLobbyPlayers([]);
-      setIsHost(false);
-      return;
-    }
+  // ✅ IGNORER gamle snapshots (cache / gammel lobby)
+  if (expectedSessionId && l.sessionId !== expectedSessionId) {
+    return;
+  }
 
-    setLobby(l);
-  });
+  // Nå er det trygt å håndtere status
+  if (l.status === "closed") {
+    setShowThemes(false);
+    setInviteCode("");
+    setLobby(null);
+    setLobbyPlayers([]);
+    setIsHost(false);
+    setExpectedSessionId(null);
+    return;
+  }
+
+  setLobby(l);
+});
+
 
   return () => unsub();
 }, [inviteCode]);
@@ -291,7 +307,7 @@ const setupLobby = useCallback(
   useEffect(() => {
   if (!inviteCode) return;
   localStorage.setItem("imposter_last_lobby", inviteCode);
-}, [inviteCode]);
+}, [inviteCode, expectedSessionId]);
 
 
   // merge + dedupe players
