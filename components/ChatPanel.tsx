@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import styled, { keyframes, css } from "styled-components";
 import type { Player } from "@/types/player";
-import { submitChatWord } from "@/firebase/lobby";
+import { submitChatWord, setTyping } from "@/firebase/lobby";
 import { FaSatelliteDish, FaTerminal, FaChevronRight, FaHdd } from "react-icons/fa";
 import type { AvatarSkin, AvatarType } from "@/firebase/avatarPrefs";
 import { PlayerAvatar } from "@/components/avatars/PlayerAvatar";
@@ -66,6 +66,20 @@ export default function ChatPanel({
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat.log]);
+  useEffect(() => {
+  if (readOnly) return;
+  if (!inviteCode || !myUid) return;
+
+  // bare den som har turen skal sette typing
+  if (!isMyTurn) return;
+
+  const hasText = input.trim().length > 0;
+  const t = setTimeout(() => {
+    setTyping(inviteCode, myUid, hasText).catch(() => {});
+  }, 250);
+
+  return () => clearTimeout(t);
+}, [input, inviteCode, myUid, isMyTurn, readOnly]);
 
   const handleSend = async () => {
     setError(null);
@@ -87,6 +101,8 @@ export default function ChatPanel({
     } finally {
       setSending(false);
     }
+    await setTyping(inviteCode, myUid, false).catch(() => {});
+
   };
 
   const groupedLog = useMemo(() => {

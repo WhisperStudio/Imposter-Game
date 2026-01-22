@@ -344,7 +344,6 @@ export async function submitChatWord(inviteCode: string, playerUid: string, rawT
     if (!chat) throw new Error("No chat state");
 
     if (chat.turnUid !== playerUid) throw new Error("Not your turn");
-
     const round: number = chat.round ?? 1;
     const turnIndex: number = chat.turnIndex ?? 0;
 
@@ -385,16 +384,21 @@ export async function submitChatWord(inviteCode: string, playerUid: string, rawT
         : chat.turnUid; // irrelevant i vote
 
     const update: any = {
-      game: {
-        chat: {
-          round: nextRound,
-          turnIndex: nextTurnIndex,
-          turnUid: nextTurnUid,
-          log: nextLog,
-        },
-        phase: nextPhase,
-      },
-    };
+  game: {
+    chat: {
+      round: nextRound,
+      turnIndex: nextTurnIndex,
+      turnUid: nextTurnUid,
+      log: nextLog,
+
+      // ✅ nullstill typing når ord sendes
+      typingUid: null,
+      typingAt: Date.now(),
+    },
+    phase: nextPhase,
+  },
+};
+
 
     // hvis vi går til vote, init votes hvis ikke finnes
     if (nextPhase === "vote") {
@@ -569,6 +573,27 @@ export async function leaveLobby(inviteCode: string, uid: string) {
   }
 }
 
+export async function setTyping(inviteCode: string, uid: string, isTyping: boolean) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(lobbyRef);
+    if (!snap.exists()) return;
+
+    tx.set(
+      lobbyRef,
+      {
+        game: {
+          chat: {
+            typingUid: isTyping ? uid : null,
+            typingAt: Date.now(),
+          },
+        },
+      },
+      { merge: true }
+    );
+  });
+}
 
 
 

@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import styled, { keyframes, css } from "styled-components";
 import type { Player } from "@/types/player";
 import { readSkin, readType, type AvatarSkin, type AvatarType } from "@/firebase/avatarPrefs";
+import { PlayerAvatar } from "@/components/avatars/PlayerAvatar";
+
 import { RedAstronautAvatar } from "@/components/avatars/RedAstronautAvatar";
 import { FaUserSecret, FaUserAstronaut, FaEyeSlash, FaFingerprint } from "react-icons/fa";
 import { AstronautAvatar } from "./avatars/AstronautAvatar";
@@ -80,6 +82,9 @@ export default function Game({ inviteCode, players, myUid, game, isHost, hostUid
   const phase = game?.phase ?? "reveal";
   const isMobile = useIsMobile();
 const showMiniCardInChatMobile = isMobile && phase === "chat";
+const activeTurnUid = phase === "chat" ? game?.chat?.turnUid : null;
+const typingUid = phase === "chat" ? (game as any)?.chat?.typingUid ?? null : null;
+
 
 
   const [cardFlipped, setCardFlipped] = useState(false);
@@ -153,7 +158,7 @@ const skinByUid = useMemo(() => {
     {showMiniCardInChatMobile && (
       <RoleMiniCard $isImposter={isImposter} $compact>
         <RoleMiniTop>
-          <RoleMiniTag>{"ROLE - "}</RoleMiniTag>
+          <RoleMiniTag>{"ROLE -"}</RoleMiniTag>
           <RoleMiniTitle>{isImposter ? "IMPOSTER" : "CREW"}</RoleMiniTitle>
         </RoleMiniTop>
 
@@ -173,21 +178,75 @@ const skinByUid = useMemo(() => {
       </RoleMiniCard>
     )}
 
-    <GlassPanel>
-      <ChatPanel
-        inviteCode={inviteCode}
-        myUid={myUid}
-        players={players}
-        chat={game.chat}
-        avatarTypeByUid={avatarTypeByUid}
-        skinByUid={skinByUid}
-        avatarSize={26}
-        secretWord={game.word ?? null}
-        isImposter={isImposter}
-      />
-    </GlassPanel>
+    {/* ✅ MOBILE: Crew + Chat i samme “attached” modul */}
+    {isMobile ? (
+      <AttachedStack>
+        <CrewManifestMobile>
+          <ManifestTitle>CREW MANIFEST</ManifestTitle>
+          <CrewList>
+            {players.map((p) => {
+              const pType = avatarTypeByUid[p.uid] ?? "classicAstronaut";
+              const pSkin = skinByUid[p.uid] ?? "classic";
+
+              const isMe = p.uid === myUid;
+              const hasTurn = !!activeTurnUid && p.uid === activeTurnUid;
+              const dimOthers = !!activeTurnUid && p.uid !== activeTurnUid;
+              const isTyping = !!typingUid && p.uid === typingUid;
+
+              return (
+                <CrewItem key={p.uid} $isMe={isMe} $hasTurn={hasTurn} $dim={dimOthers}>
+                  <AvatarFrame data-skin={pSkin}>
+                    <PlayerAvatar type={pType} size={40} />
+                  </AvatarFrame>
+
+                  <CrewInfo>
+                    <CrewName>
+                      {p.name}
+                      {isTyping && <TypingPill>typing…</TypingPill>}
+                    </CrewName>
+                    <CrewStatus>{hasTurn ? "IMPOSTER?" : "ONLINE"}</CrewStatus>
+                  </CrewInfo>
+
+                  {isMe && <MeBadge>ME:)</MeBadge>}
+                </CrewItem>
+              );
+            })}
+          </CrewList>
+        </CrewManifestMobile>
+
+        <ChatShellMobile>
+          <ChatPanel
+            inviteCode={inviteCode}
+            myUid={myUid}
+            players={players}
+            chat={game.chat}
+            avatarTypeByUid={avatarTypeByUid}
+            skinByUid={skinByUid}
+            avatarSize={26}
+            secretWord={game.word ?? null}
+            isImposter={isImposter}
+          />
+        </ChatShellMobile>
+      </AttachedStack>
+    ) : (
+      /* ✅ DESKTOP: vanlig chat i GlassPanel */
+      <GlassPanel>
+        <ChatPanel
+          inviteCode={inviteCode}
+          myUid={myUid}
+          players={players}
+          chat={game.chat}
+          avatarTypeByUid={avatarTypeByUid}
+          skinByUid={skinByUid}
+          avatarSize={26}
+          secretWord={game.word ?? null}
+          isImposter={isImposter}
+        />
+      </GlassPanel>
+    )}
   </>
 )}
+
 
 
 {phase === "vote" && (
@@ -230,47 +289,67 @@ const skinByUid = useMemo(() => {
 
         {/* --- RIGHT COLUMN: CREW MANIFEST --- */}
         <SideColumn>
-{phase !== "reveal" && !showMiniCardInChatMobile && (
-  <RoleMiniCard $isImposter={isImposter}>
-    <RoleMiniTop>
-      <RoleMiniTag>{"ROLE - "}</RoleMiniTag>
-      <RoleMiniTitle>{isImposter ? "IMPOSTER" : "CREW"}</RoleMiniTitle>
-    </RoleMiniTop>
+  {/* Skjul hele sidekolonnen når mobil+chat (fordi den flyttes inn i attached) */}
+  {!(isMobile && phase === "chat") && (
+    <>
+      {phase !== "reveal" && !showMiniCardInChatMobile && (
+        <RoleMiniCard $isImposter={isImposter} $compact>
+        <RoleMiniTop>
+          <RoleMiniTag>{"ROLE -"}</RoleMiniTag>
+          <RoleMiniTitle>{isImposter ? "IMPOSTER" : "CREW"}</RoleMiniTitle>
+        </RoleMiniTop>
 
-    <RoleMiniBody>
-      {isImposter ? (
-        <>
-          <MiniLabel>Hint - </MiniLabel>
-          <MiniValue>{hint ?? "Blend in"}</MiniValue>
-        </>
-      ) : (
-        <>
-          <MiniLabel>Word - </MiniLabel>
-          <MiniValue>{word ?? "???"}</MiniValue>
-        </>
+        <RoleMiniBody>
+          {isImposter ? (
+            <>
+              <MiniLabel>Hint - </MiniLabel>
+              <MiniValue>{hint ?? "Blend in"}</MiniValue>
+            </>
+          ) : (
+            <>
+              <MiniLabel>Word - </MiniLabel>
+              <MiniValue>{word ?? "???"}</MiniValue>
+            </>
+          )}
+        </RoleMiniBody>
+      </RoleMiniCard>
       )}
-    </RoleMiniBody>
-  </RoleMiniCard>
-)}
 
-          <CrewManifest>
-            <ManifestTitle>CREW MANIFEST</ManifestTitle>
-            <CrewList>
-              {players.map((p) => (
-                <CrewItem key={p.uid} $isMe={p.uid === myUid}>
-                   <AvatarFrame data-skin={skin}>
-                      <AvatarComponent size={40} />
-                   </AvatarFrame>
-                   <CrewInfo>
-                      <CrewName>{p.name}</CrewName>
-                      <CrewStatus>ONLINE</CrewStatus>
-                   </CrewInfo>
-                   {p.uid === myUid && <MeBadge>YOU</MeBadge>}
-                </CrewItem>
-              ))}
-            </CrewList>
-          </CrewManifest>
-        </SideColumn>
+      <CrewManifest>
+        <ManifestTitle>CREW MANIFEST</ManifestTitle>
+        <CrewList>
+          {players.map((p) => {
+            const pType = avatarTypeByUid[p.uid] ?? "classicAstronaut";
+            const pSkin = skinByUid[p.uid] ?? "classic";
+
+            const isMe = p.uid === myUid;
+            const hasTurn = !!activeTurnUid && p.uid === activeTurnUid;
+            const dimOthers = !!activeTurnUid && p.uid !== activeTurnUid;
+            const isTyping = !!typingUid && p.uid === typingUid;
+
+            return (
+              <CrewItem key={p.uid} $isMe={isMe} $hasTurn={hasTurn} $dim={dimOthers}>
+                <AvatarFrame data-skin={pSkin}>
+                  <PlayerAvatar type={pType} size={40} />
+                </AvatarFrame>
+
+                <CrewInfo>
+                  <CrewName>
+                    {p.name}
+                    {isTyping && <TypingPill>typing…</TypingPill>}
+                  </CrewName>
+                  <CrewStatus>{hasTurn ? "IMPOSTER?" : "ONLINE"}</CrewStatus>
+                </CrewInfo>
+
+                {isMe && <MeBadge>ME :)</MeBadge>}
+              </CrewItem>
+            );
+          })}
+        </CrewList>
+      </CrewManifest>
+    </>
+  )}
+</SideColumn>
 
       </ContentArea>
     </MainContainer>
@@ -667,16 +746,46 @@ const CrewList = styled.div`
   gap: 0.75rem;
 `;
 
-const CrewItem = styled.div<{ $isMe: boolean }>`
+const CrewItem = styled.div<{ $isMe: boolean; $hasTurn?: boolean; $dim?: boolean }>`
   display: flex;
   align-items: center;
   gap: 1rem;
   padding: 0.75rem;
-  background: ${({ $isMe }) => $isMe ? "rgba(99, 102, 241, 0.15)" : "rgba(255,255,255,0.03)"};
-  border-left: 2px solid ${({ $isMe }) => $isMe ? "#6366f1" : "transparent"};
+
   border-radius: 0 8px 8px 0;
-  transition: background 0.2s;
+  transition: all 0.2s ease;
+
+  background: ${({ $isMe, $hasTurn }) =>
+    $hasTurn
+      ? "rgba(99, 102, 241, 0.28)"
+      : $isMe
+      ? "rgba(99, 102, 241, 0.15)"
+      : "rgba(255,255,255,0.03)"};
+
+  border-left: 2px solid ${({ $hasTurn, $isMe }) => ($hasTurn ? "#a5b4fc" : $isMe ? "#6366f1" : "transparent")};
+
+  opacity: ${({ $dim }) => ($dim ? 0.45 : 1)};
+  filter: ${({ $dim }) => ($dim ? "saturate(0.6)" : "none")};
+
+  ${({ $hasTurn }) =>
+    $hasTurn &&
+    css`
+      transform: translateX(2px);
+      box-shadow: 0 0 18px rgba(99, 102, 241, 0.18);
+    `}
 `;
+
+const TypingPill = styled.span`
+  margin-left: 0.5rem;
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: rgba(56, 189, 248, 0.08);
+  color: #7dd3fc;
+`;
+
 
 const AvatarFrame = styled.div`
   /* Avatar skin logic copied from original */
@@ -709,4 +818,28 @@ const MeBadge = styled.div`
   padding: 2px 6px;
   border-radius: 4px;
   font-weight: 800;
+`;
+const AttachedStack = styled.div`
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(15, 23, 42, 0.55);
+`;
+
+const CrewManifestMobile = styled.div`
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.8);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+
+  /* Top rounded, bottom sharp */
+  border-radius: 16px 16px 0 0;
+`;
+
+const ChatShellMobile = styled.div`
+  /* Top sharp, bottom rounded */
+  border-radius: 0 0 16px 16px;
+  overflow: hidden;
+
+  /* viktig: ChatPanel sin root bør fylle */
 `;
