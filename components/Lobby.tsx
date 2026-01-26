@@ -97,9 +97,23 @@ export default function Lobby({
   }, [uid]);
 
   useEffect(() => {
-  if (mode !== "menu") return;
-  if (showJoinForm) onHyperspeed?.(true);
-}, [mode, showJoinForm, onHyperspeed]);
+    if (mode !== "menu") {
+      // Ensure hyperspeed is off when not in menu mode
+      onHyperspeed?.(false);
+      return;
+    }
+    
+    if (showJoinForm) {
+      onHyperspeed?.(true);
+    } else {
+      onHyperspeed?.(false);
+    }
+    
+    // Cleanup function to ensure hyperspeed is turned off when component unmounts
+    return () => {
+      onHyperspeed?.(false);
+    };
+  }, [mode, showJoinForm, onHyperspeed]);
 
 
 
@@ -112,7 +126,6 @@ export default function Lobby({
   onJoinGame(inviteCode.trim().toUpperCase());
   setShowJoinForm(false);
 };
- 
   return (
     <LobbyContainer>
       <h2 style={{ fontSize: "2.5rem", color: "#e2e8f0", marginBottom: "1rem", textAlign: "center" }}>
@@ -166,7 +179,10 @@ export default function Lobby({
               <Button
                 onMouseEnter={() => onHyperspeed?.(true)}
                 onMouseLeave={() => onHyperspeed?.(false)}
-                onClick={() => setShowJoinForm(true)}
+                onClick={() => {
+                  onHyperspeed?.(false);
+                  setShowJoinForm(true);
+                }}
                 $variant="secondary"
                 style={{ width: "100%", justifyContent: "center" }}
               >

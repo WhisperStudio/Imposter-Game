@@ -446,7 +446,9 @@ const handleStartGame = useCallback(async () => {
 
       <Bar_2>
         <VoteBadge>
+          <a href="https://vintrastudio.com/" target="_blank">
           <Image src="/Vote_V.png" alt="Vote V" width={50} height={50} priority />
+          </a>
         </VoteBadge>
 
         <SettingsButton onClick={() => setShowSettings(true)} aria-label="Open settings">
