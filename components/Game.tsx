@@ -88,7 +88,7 @@ const typingUid = phase === "chat" ? (game as any)?.chat?.typingUid ?? null : nu
 
 
   const [cardFlipped, setCardFlipped] = useState(false);
-  const [miniHidden, setMiniHidden] = useState(false);
+  const [miniHidden, setMiniHidden] = useState(true); // Hidden by default
 
 
   const avatarTypeByUid = useMemo(() => {
