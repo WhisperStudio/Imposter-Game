@@ -60,7 +60,7 @@ export default function ResultPanel({ inviteCode, myUid, players, imposterUid, r
       <ReportCard>
         <ReportRow>
           <Label>The Imposter was</Label>
-          <BigValue $color="#fca5a5">{imposterName}</BigValue>
+          <BigValue $color="#ff2d55">{imposterName}</BigValue>
         </ReportRow>
 
         <Divider />
@@ -131,7 +131,7 @@ const MainTitle = styled.h1<{ $crewWon: boolean }>`
   background: ${({ $crewWon }) => 
     $crewWon 
       ? "linear-gradient(to bottom, #86efac, #22c55e)" 
-      : "linear-gradient(to bottom, #fca5a5, #ef4444)"};
+      : "linear-gradient(to bottom, #ff2d55, #ef4444)"};
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 0 15px ${({ $crewWon }) => ($crewWon ? "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)")});

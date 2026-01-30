@@ -5,6 +5,7 @@ import styled, { keyframes, css } from "styled-components";
 import type { Player } from "@/types/player";
 import { readSkin, readType, type AvatarSkin, type AvatarType } from "@/firebase/avatarPrefs";
 import { PlayerAvatar } from "@/components/avatars/PlayerAvatar";
+import AvatarSkinScope from "@/components/avatars/AvatarSkinScope";
 
 import { RedAstronautAvatar } from "@/components/avatars/RedAstronautAvatar";
 import { FaUserSecret, FaUserAstronaut, FaEyeSlash, FaFingerprint } from "react-icons/fa";
@@ -113,15 +114,19 @@ const typingUid = phase === "chat" ? (game as any)?.chat?.typingUid ?? null : nu
 
   const avatarTypeByUid = useMemo(() => {
   const out: Record<string, AvatarType> = {};
-  players.forEach((p) => (out[p.uid] = readType(p.uid)));
+  players.forEach((p) => {
+    out[p.uid] = (p.uid === myUid ? avatarType : (p.avatarType as AvatarType | undefined)) ?? "classicAstronaut";
+  });
   return out;
-}, [players]);
+}, [players, myUid, avatarType]);
 
 const skinByUid = useMemo(() => {
   const out: Record<string, AvatarSkin> = {};
-  players.forEach((p) => (out[p.uid] = readSkin(p.uid)));
+  players.forEach((p) => {
+    out[p.uid] = (p.uid === myUid ? skin : (p.skin as AvatarSkin | undefined)) ?? "classic";
+  });
   return out;
-}, [players]);
+}, [players, myUid, skin]);
 
   if (!role) return <LoadingScreen>Initializing Neural Link...</LoadingScreen>;
 
@@ -232,9 +237,9 @@ const skinByUid = useMemo(() => {
 
               return (
                 <CrewItem key={p.uid} $isMe={isMe} $hasTurn={hasTurn} $dim={dimOthers}>
-                  <AvatarFrame data-skin={pSkin}>
+                  <AvatarSkinScope skin={pSkin}>
                     <PlayerAvatar type={pType} size={40} />
-                  </AvatarFrame>
+                  </AvatarSkinScope>
 
                   <CrewInfo>
                     <CrewName>
@@ -400,9 +405,9 @@ const skinByUid = useMemo(() => {
 
             return (
               <CrewItem key={p.uid} $isMe={isMe} $hasTurn={hasTurn} $dim={dimOthers}>
-                <AvatarFrame data-skin={pSkin}>
+                <AvatarSkinScope skin={pSkin}>
                   <PlayerAvatar type={pType} size={40} />
-                </AvatarFrame>
+                </AvatarSkinScope>
 
                 <CrewInfo>
                   <CrewName>

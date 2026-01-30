@@ -3,6 +3,9 @@
 import React, { useMemo, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import type { Player } from "@/types/player";
+import type { AvatarSkin, AvatarType } from "@/firebase/avatarPrefs";
+import { PlayerAvatar } from "@/components/avatars/PlayerAvatar";
+import AvatarSkinScope from "@/components/avatars/AvatarSkinScope";
 import { submitPostGameChat } from "@/firebase/lobby";
 
 type PostChatItem = {
@@ -30,6 +33,22 @@ export default function PostGameChatPanel({ inviteCode, myUid, players, log }: P
   }, [players]);
 
   const items = Array.isArray(log) ? log : [];
+
+  const avatarTypeByUid = useMemo(() => {
+    const out: Record<string, AvatarType> = {};
+    players.forEach((p) => {
+      out[p.uid] = (p.avatarType as AvatarType | undefined) ?? "classicAstronaut";
+    });
+    return out;
+  }, [players]);
+
+  const skinByUid = useMemo(() => {
+    const out: Record<string, AvatarSkin> = {};
+    players.forEach((p) => {
+      out[p.uid] = (p.skin as AvatarSkin | undefined) ?? "classic";
+    });
+    return out;
+  }, [players]);
 
   const onSend = async () => {
     setError(null);
@@ -60,12 +79,21 @@ export default function PostGameChatPanel({ inviteCode, myUid, players, log }: P
         ) : (
           items.map((m, idx) => {
             const isMe = m.uid === myUid;
+            const msgSkin = skinByUid?.[m.uid] ?? "classic";
+            const msgType = avatarTypeByUid?.[m.uid] ?? "classicAstronaut";
             return (
               <Msg key={`${m.at}-${idx}`} $me={isMe}>
-                <Meta>
-                  <Name>{(nameByUid.get(m.uid) ?? "Unknown").toUpperCase()}</Name>
-                </Meta>
-                <Body>{m.text}</Body>
+                <AvatarCol>
+                  <AvatarSkinScope skin={msgSkin}>
+                    <PlayerAvatar type={msgType} size={38} />
+                  </AvatarSkinScope>
+                </AvatarCol>
+                <MsgContent>
+                  <Meta>
+                    <Name>{(nameByUid.get(m.uid) ?? "Unknown").toUpperCase()}</Name>
+                  </Meta>
+                  <Body>{m.text}</Body>
+                </MsgContent>
               </Msg>
             );
           })
@@ -139,10 +167,25 @@ const Empty = styled.div`
 `;
 
 const Msg = styled.div<{ $me: boolean }>`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
   border-radius: 12px;
   padding: 0.65rem 0.8rem;
   border: 1px solid ${({ $me }) => ($me ? "rgba(16,185,129,0.25)" : "rgba(255,255,255,0.08)")};
   background: ${({ $me }) => ($me ? "rgba(16,185,129,0.08)" : "rgba(0,0,0,0.18)")};
+`;
+
+const AvatarCol = styled.div`
+  width: 44px;
+  display: grid;
+  place-items: start center;
+  flex: 0 0 auto;
+`;
+
+const MsgContent = styled.div`
+  flex: 1;
+  min-width: 0;
 `;
 
 const Meta = styled.div`
