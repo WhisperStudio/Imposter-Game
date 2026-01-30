@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import styled, { keyframes } from "styled-components";
 import { useTheme } from "./ThemeContext";
-import { setLobbyTheme } from "@/firebase/lobby";
+import { setLobbyThemes } from "@/firebase/lobby";
 import PlayButton from "./PlayButton";
 
 /* ---------------- DATA: ORDBANK ---------------- */
@@ -118,6 +118,7 @@ interface ThemesProps {
   canStartGame: boolean;
   inviteCode: string;
   hostUid: string;
+  initialSelectedThemeIds?: string[];
 }
 
 /* ---------------- component ---------------- */
@@ -129,8 +130,9 @@ export default function Themes({
   canStartGame,
   inviteCode,
   hostUid,
+  initialSelectedThemeIds,
 }: ThemesProps) {
-  const { selectedThemeId, setTheme } = useTheme();
+  const { selectedThemeIds, toggleTheme, setThemes } = useTheme();
 
   const themeCategories = useMemo(
     () => [
@@ -158,6 +160,11 @@ export default function Themes({
     }
   }, [activeCategoryId, themeCategories]);
 
+  useEffect(() => {
+    if (!Array.isArray(initialSelectedThemeIds)) return;
+    setThemes(initialSelectedThemeIds);
+  }, [initialSelectedThemeIds]);
+
   const activeCategory = themeCategories.find((c) => c.id === activeCategoryId);
 
   const handleSelectTheme = async (themeId: string) => {
@@ -165,8 +172,12 @@ export default function Themes({
     if (!inviteCode || !hostUid) return;
     if (!isValidTheme(themeId)) return;
 
-    setTheme(themeId);
-    await setLobbyTheme(inviteCode, hostUid, themeId);
+    const nextSelected = selectedThemeIds.includes(themeId)
+      ? selectedThemeIds.filter((t) => t !== themeId)
+      : [...selectedThemeIds, themeId];
+
+    toggleTheme(themeId);
+    await setLobbyThemes(inviteCode, hostUid, nextSelected);
   };
 
   // glare stuff (samme som før, men litt enklere)
@@ -216,13 +227,13 @@ export default function Themes({
               .map((theme, index) => (
                 <FeaturedThemeButton
                   key={theme}
-                  $isSelected={selectedThemeId === theme}
+                  $isSelected={selectedThemeIds.includes(theme)}
                   onClick={() => handleSelectTheme(theme)}
                   disabled={!isHost}
                   title={!isHost ? "Only host can choose theme" : ""}
                 >
                   <GlareEffect $show={glareStates[`featured-${index}`] || false} />
-                  <CheckDot $isSelected={selectedThemeId === theme}>✓</CheckDot>
+                  <CheckDot $isSelected={selectedThemeIds.includes(theme)}>✓</CheckDot>
                   {theme}
                 </FeaturedThemeButton>
               ))}
@@ -247,14 +258,14 @@ export default function Themes({
       <OptionsPanel>
         <OptionsTitle>
           {activeCategory?.name ?? "Options"}
-          <SmallHint>Pick one theme</SmallHint>
+          <SmallHint>Pick themes</SmallHint>
         </OptionsTitle>
 
         <OptionsGrid>
           {(activeCategory?.items ?? [])
             .filter(isValidTheme)
             .map((item) => {
-              const selected = selectedThemeId === item;
+              const selected = selectedThemeIds.includes(item);
               return (
                 <OptionCard
                   key={item}

@@ -4,17 +4,20 @@ import React, { useMemo, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import type { Player } from "@/types/player";
 import { resetGame } from "@/firebase/lobby";
+import PostGameChatPanel from "@/components/PostGameChatPanel";
 
 type Props = {
   inviteCode: string;
+  myUid: string;
   players: Player[];
   imposterUid: string;
   result: { winner: "crew" | "imposter"; loser?: "crew" | "imposter"; eliminatedUid: string };
+  postChat?: { log: Array<{ uid: string; text: string; at: number }> } | null;
   isHost: boolean;
   hostUid: string;
 };
 
-export default function ResultPanel({ inviteCode, players, imposterUid, result, isHost, hostUid }: Props) {
+export default function ResultPanel({ inviteCode, myUid, players, imposterUid, result, postChat, isHost, hostUid }: Props) {
   const [resetting, setResetting] = useState(false);
 
   const nameByUid = useMemo(() => {
@@ -27,6 +30,13 @@ export default function ResultPanel({ inviteCode, players, imposterUid, result, 
   const eliminatedName = nameByUid.get(result.eliminatedUid) ?? "Skipped Vote";
 
   const crewWon = result.winner === "crew";
+
+  const outcomeText =
+    result.winner === "imposter" && result.eliminatedUid === imposterUid
+      ? "Imposter guessed the secret word"
+      : crewWon
+        ? "Imposter Eliminated"
+        : "Crew Eliminated Wrong Person";
 
   const handlePlayAgain = async () => {
     try {
@@ -43,28 +53,35 @@ export default function ResultPanel({ inviteCode, players, imposterUid, result, 
       <ResultHeader>
         <SubTitle>GAME OVER</SubTitle>
         <MainTitle $crewWon={crewWon}>
-            {crewWon ? "CREW VICTORY" : "IMPOSTER WINS"}
+          {crewWon ? "CREW VICTORY" : "IMPOSTER WINS"}
         </MainTitle>
       </ResultHeader>
 
       <ReportCard>
         <ReportRow>
-             <Label>The Imposter was</Label>
-             <BigValue $color="#fca5a5">{imposterName}</BigValue>
+          <Label>The Imposter was</Label>
+          <BigValue $color="#fca5a5">{imposterName}</BigValue>
         </ReportRow>
-        
+
         <Divider />
-        
+
         <ReportRow>
-             <Label>Eliminated</Label>
-             <Value>{eliminatedName}</Value>
+          <Label>Eliminated</Label>
+          <Value>{eliminatedName}</Value>
         </ReportRow>
-        
+
         <ReportRow>
-             <Label>Outcome</Label>
-             <Value>{crewWon ? "Imposter Eliminated" : "Crew Eliminated Wrong Person"}</Value>
+          <Label>Outcome</Label>
+          <Value>{outcomeText}</Value>
         </ReportRow>
       </ReportCard>
+
+      <PostGameChatPanel
+        inviteCode={inviteCode}
+        myUid={myUid}
+        players={players}
+        log={Array.isArray(postChat?.log) ? postChat?.log : []}
+      />
 
       <Footer>
         {isHost ? (
@@ -82,8 +99,8 @@ export default function ResultPanel({ inviteCode, players, imposterUid, result, 
 // --- STYLES ---
 
 const slideUp = keyframes`
-    from { transform: translateY(20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 `;
 
 const ResultContainer = styled.div<{ $crewWon: boolean }>`

@@ -5,6 +5,8 @@ import { FaArrowRight, FaUserPlus, FaGamepad, FaSignOutAlt } from "react-icons/f
 import { useState, useEffect, useMemo } from "react";
 import type { Player } from "@/types/player";
 
+import { updateLobbySettings } from "@/firebase/lobby";
+
 
 import { PlayerAvatar } from "@/components/avatars/PlayerAvatar";
 import AvatarSkinScope from "@/components/avatars/AvatarSkinScope";
@@ -43,6 +45,8 @@ function getOrCreateUid() {
 
 type LobbyMode = "menu" | "room";
 
+type Difficulty = "easy" | "normal" | "hard" | "ultimate";
+
 interface LobbyProps {
   mode?: LobbyMode;
 
@@ -57,6 +61,10 @@ interface LobbyProps {
   // shared
   players: Player[];
   isHost?: boolean;
+
+  inviteCode?: string;
+  hostUid?: string;
+  lobbySettings?: any;
 }
 
 /* ---------------- component ---------------- */
@@ -70,6 +78,9 @@ export default function Lobby({
   onExitLobby,
   onHyperspeed,
   isHost = false,
+  inviteCode: activeInviteCode,
+  hostUid,
+  lobbySettings,
 }: LobbyProps) {
   const uid = useMemo(() => getOrCreateUid(), []);
 
@@ -79,6 +90,25 @@ export default function Lobby({
   // prefs
   const [avatarType, setAvatarType] = useState<AvatarType>("classicAstronaut");
   const [skin, setSkin] = useState<AvatarSkin>("classic");
+
+  const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [timerEnabled, setTimerEnabled] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState<number>(30);
+
+  useEffect(() => {
+    const d: Difficulty =
+      lobbySettings?.difficulty === "easy" ||
+      lobbySettings?.difficulty === "normal" ||
+      lobbySettings?.difficulty === "hard" ||
+      lobbySettings?.difficulty === "ultimate"
+        ? lobbySettings.difficulty
+        : "normal";
+    setDifficulty(d);
+
+    const perTurn = typeof lobbySettings?.perTurnTimerSeconds === "number" ? lobbySettings.perTurnTimerSeconds : null;
+    setTimerEnabled(typeof perTurn === "number" && perTurn > 0);
+    if (typeof perTurn === "number" && perTurn > 0) setTimerSeconds(perTurn);
+  }, [lobbySettings]);
 
   // Toggle hyperspeed effect
   const toggleHyperspeed = (active: boolean, source: string) => {
@@ -143,6 +173,35 @@ export default function Lobby({
   onJoinGame(inviteCode.trim().toUpperCase());
   setShowJoinForm(false);
 };
+
+  const applySettings = async (next: { difficulty?: Difficulty; perTurnTimerSeconds?: number | null }) => {
+    if (!isHost) return;
+    if (!activeInviteCode || !hostUid) return;
+
+    try {
+      await updateLobbySettings(activeInviteCode, hostUid, next);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const onChangeDifficulty = async (v: Difficulty) => {
+    setDifficulty(v);
+    await applySettings({ difficulty: v });
+  };
+
+  const onToggleTimer = async (enabled: boolean) => {
+    setTimerEnabled(enabled);
+    await applySettings({ perTurnTimerSeconds: enabled ? timerSeconds : null });
+  };
+
+  const onChangeTimerSeconds = async (v: number) => {
+    const next = Number.isFinite(v) ? Math.max(5, Math.min(300, Math.floor(v))) : 30;
+    setTimerSeconds(next);
+    if (!timerEnabled) return;
+    await applySettings({ perTurnTimerSeconds: next });
+  };
+
   return (
     <LobbyContainer>
       <h2 style={{ fontSize: "2.5rem", color: "#e2e8f0", marginBottom: "1rem", textAlign: "center" }}>
@@ -248,7 +307,47 @@ export default function Lobby({
 
       {/* ROOM MODE CONTROLS */}
       {mode === "room" && (
-        <RoomActions>
+        <>
+          <RoundSettingsCard>
+            <RoundSettingsTitle>Round Settings</RoundSettingsTitle>
+
+            <Row>
+              <RowLabel>Difficulty</RowLabel>
+              <Select
+                value={difficulty}
+                onChange={(e) => onChangeDifficulty(e.target.value as Difficulty)}
+                disabled={!isHost}
+              >
+                <option value="easy">Easy</option>
+                <option value="normal">Normal</option>
+                <option value="hard">Hard</option>
+                <option value="ultimate">Ultimate</option>
+              </Select>
+            </Row>
+
+            <Row>
+              <RowLabel>Turn Timer</RowLabel>
+              <TimerRow>
+                <input
+                  type="checkbox"
+                  checked={timerEnabled}
+                  onChange={(e) => onToggleTimer(e.target.checked)}
+                  disabled={!isHost}
+                />
+                <TimerInput
+                  type="number"
+                  min={5}
+                  max={300}
+                  value={timerSeconds}
+                  onChange={(e) => onChangeTimerSeconds(parseInt(e.target.value || "0", 10))}
+                  disabled={!isHost || !timerEnabled}
+                />
+                <TimerSuffix>sec</TimerSuffix>
+              </TimerRow>
+            </Row>
+          </RoundSettingsCard>
+
+          <RoomActions>
           <Button
             onClick={() => onExitLobby?.()}
             $variant="secondary"
@@ -269,7 +368,8 @@ export default function Lobby({
               Pick Themes <FaArrowRight />
             </Button>
           )}
-        </RoomActions>
+          </RoomActions>
+        </>
       )}
     </LobbyContainer>
   );
@@ -429,5 +529,66 @@ const RoomActions = styled.div`
   justify-content: center;
   flex-wrap: wrap;
   margin-top: 0.5rem;
+`;
+
+const RoundSettingsCard = styled.div`
+  width: 100%;
+  max-width: 520px;
+  padding: 1rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
+const RoundSettingsTitle = styled.div`
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+`;
+
+const Row = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+`;
+
+const RowLabel = styled.div`
+  color: #94a3b8;
+  font-size: 0.85rem;
+  font-weight: 700;
+`;
+
+const Select = styled.select`
+  width: 200px;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.25);
+  color: #e2e8f0;
+`;
+
+const TimerRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const TimerInput = styled.input`
+  width: 86px;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.25);
+  color: #e2e8f0;
+`;
+
+const TimerSuffix = styled.div`
+  color: #94a3b8;
+  font-size: 0.85rem;
 `;
 

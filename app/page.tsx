@@ -31,9 +31,9 @@ import {
   leaveLobby,
   closeLobby,
   updatePlayerPrefs,
+  findReusableLobby,
+  updatePlayerName,
 } from "@/firebase/lobby";
-
-import { findReusableLobby, updatePlayerName } from "@/firebase/lobby";
 import { useTheme } from "@/components/ThemeContext";
 
 import { readSkin, readType, readElectricTheme, readName, type AvatarSkin, type AvatarType } from "@/firebase/avatarPrefs";
@@ -80,7 +80,13 @@ type StarT = {
   rot: number; // ✅
 };
 
-const StarryBackground = ({ hyperspeed = false }: { hyperspeed?: boolean }) => {
+const StarryBackground = ({ 
+  hyperspeed = false, 
+  paused = false 
+}: { 
+  hyperspeed?: boolean;
+  paused?: boolean;
+}) => {
   const [stars, setStars] = useState<StarT[]>([]);
 
   useEffect(() => {
@@ -116,7 +122,7 @@ const StarryBackground = ({ hyperspeed = false }: { hyperspeed?: boolean }) => {
   }, []);
 
   return (
-    <StarBackground $hyperspeed={hyperspeed}>
+    <StarBackground $hyperspeed={hyperspeed} $paused={paused}>
       {stars.map((s) => (
         <Star
           key={s.id}
@@ -138,7 +144,7 @@ const StarryBackground = ({ hyperspeed = false }: { hyperspeed?: boolean }) => {
 
 export default function Home() {
   const uid = useMemo(() => getOrCreateUid(), []);
-  const { selectedThemeId } = useTheme();
+  useTheme();
   const [hyperspeed, setHyperspeed] = useState(false);
 
   const [showThemes, setShowThemes] = useState(false);
@@ -380,7 +386,19 @@ useEffect(() => {
 const handleStartGame = useCallback(async () => {
   if (!inviteCode || !myPlayer) return;
 
-  const themeId: string | null = lobby?.settings?.selectedThemeId ?? null;
+  const selectedThemeIds: string[] = Array.isArray(lobby?.settings?.selectedThemeIds)
+    ? lobby.settings.selectedThemeIds
+    : lobby?.settings?.selectedThemeId
+      ? [lobby.settings.selectedThemeId]
+      : [];
+
+  const activeThemeIndex: number = typeof lobby?.settings?.activeThemeIndex === "number" ? lobby.settings.activeThemeIndex : 0;
+  const themeId: string | null =
+    lobby?.settings?.selectedThemeId ??
+    selectedThemeIds[activeThemeIndex] ??
+    selectedThemeIds[0] ??
+    null;
+
   if (!themeId) {
     alert("Host must select a theme first!");
     return;
@@ -392,8 +410,32 @@ const handleStartGame = useCallback(async () => {
     return;
   }
 
-  // ✅ Velg secret word (crew får dette)
-  const randomWord = words[Math.floor(Math.random() * words.length)];
+  const usedWordsByTheme: Record<string, string[]> =
+    lobby?.settings?.usedWordsByTheme && typeof lobby.settings.usedWordsByTheme === "object" ? lobby.settings.usedWordsByTheme : {};
+  const usedForTheme = Array.isArray(usedWordsByTheme?.[themeId]) ? usedWordsByTheme[themeId] : [];
+  const remaining = words.filter((w) => !usedForTheme.includes(w));
+
+  if (remaining.length === 0) {
+    alert("No unused words left for theme: " + themeId);
+    return;
+  }
+
+  const difficulty: string = typeof lobby?.settings?.difficulty === "string" ? lobby.settings.difficulty : "normal";
+  const wordLen = (w: string) => (w ?? "").toString().replace(/\s+/g, "").length;
+  const fitsDifficulty = (w: string) => {
+    const n = wordLen(w);
+    if (difficulty === "easy") return n <= 5;
+    if (difficulty === "normal") return n >= 5 && n <= 7;
+    if (difficulty === "hard") return n >= 7;
+    if (difficulty === "ultimate") return n >= 8;
+    return true;
+  };
+
+  const diffPool = remaining.filter(fitsDifficulty);
+  const pickPool = diffPool.length > 0 ? diffPool : remaining;
+
+  // ✅ Velg secret word (crew får dette) – men aldri gjenta
+  const randomWord = pickPool[Math.floor(Math.random() * pickPool.length)];
 
   // ✅ Lag snilt imposter-hint:
   // - fortell temaet
@@ -407,9 +449,18 @@ const handleStartGame = useCallback(async () => {
   }
 
   const imposterHint = `THEME: ${themeId}.  WORD LENGTH: ${randomWord.length}.`;
+  const imposterHintEasy = `THEME: ${themeId}.  WORD LENGTH: ${randomWord.length}. EXAMPLES: ${examples.join(", ")}.`;
+  const imposterHintHard = `THEME: ${themeId}.`;
+
+  const finalHint =
+    difficulty === "easy"
+      ? imposterHintEasy
+      : difficulty === "hard" || difficulty === "ultimate"
+        ? imposterHintHard
+        : imposterHint;
   // Fjernet Exampleword for mer vanskelighetsgrad: Example words: ${examples.join(", ")}.
   // ✅ Start game med hint
-  await startGame(inviteCode, myPlayer.uid, randomWord, themeId, imposterHint);
+  await startGame(inviteCode, myPlayer.uid, randomWord, themeId, finalHint);
 }, [inviteCode, myPlayer, lobby]);
 
 
@@ -498,6 +549,7 @@ const handleStartGame = useCallback(async () => {
     game={gameData}
     isHost={isHost}
     hostUid={myPlayer?.uid ?? ""}
+    lobbySettings={lobby?.settings ?? null}
   />
 ) : !inviteCode ? (
   // ✅ STARTMENY (Create/Join)
@@ -516,9 +568,19 @@ const handleStartGame = useCallback(async () => {
     onBack={() => setShowThemes(false)}
     onStartGame={handleStartGame}
     isHost={isHost}
-    canStartGame={!!lobby?.settings?.selectedThemeId}
+    canStartGame={
+      (Array.isArray(lobby?.settings?.selectedThemeIds) && lobby.settings.selectedThemeIds.length > 0) ||
+      !!lobby?.settings?.selectedThemeId
+    }
     inviteCode={inviteCode}
     hostUid={myPlayer?.uid ?? ""}
+    initialSelectedThemeIds={
+      Array.isArray(lobby?.settings?.selectedThemeIds)
+        ? lobby.settings.selectedThemeIds
+        : lobby?.settings?.selectedThemeId
+          ? [lobby.settings.selectedThemeId]
+          : []
+    }
   />
 ) : (
   // ✅ LOBBY ROM (etter join/create)
@@ -528,6 +590,9 @@ const handleStartGame = useCallback(async () => {
     isHost={isHost}
     onContinueToThemes={() => setShowThemes(true)}
     onExitLobby={handleExitLobby}
+    inviteCode={inviteCode}
+    hostUid={myPlayer?.uid ?? ""}
+    lobbySettings={lobby?.settings ?? null}
   />
 )}
 
@@ -584,13 +649,21 @@ const PageContainer = styled.div`
   }
 `;
 
-const StarBackground = styled.div<{ $hyperspeed?: boolean }>`
+const StarBackground = styled.div<{ $hyperspeed?: boolean; $paused?: boolean }>`
   position: fixed;
   inset: 0;
   background: radial-gradient(circle at center, #020617, #000);
   perspective: 800px;
   overflow: hidden;
   z-index: 0;
+
+  ${({ $paused }) =>
+    $paused &&
+    `
+      * {
+        animation-play-state: paused !important;
+      }
+    `}
 
   ${({ $hyperspeed }) =>
     $hyperspeed &&

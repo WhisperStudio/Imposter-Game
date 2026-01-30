@@ -157,8 +157,16 @@ export async function findReusableLobby(): Promise<string | null> {
   return snap.docs[0].id; // inviteCode
 }
 
-export async function setLobbyTheme(inviteCode: string, hostUid: string, themeId: string) {
+export async function getLobby(inviteCode: string): Promise<DocumentData | null> {
   const lobbyRef = doc(db, "lobbies", inviteCode);
+  const snap = await getDoc(lobbyRef);
+  if (!snap.exists()) return null;
+  return snap.data();
+}
+
+export async function setLobbyThemes(inviteCode: string, hostUid: string, themeIds: string[]) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+  const normalized = Array.from(new Set((themeIds ?? []).filter(Boolean)));
 
   await runTransaction(db, async (tx: Transaction) => {
     const snap = await tx.get(lobbyRef);
@@ -168,16 +176,30 @@ export async function setLobbyTheme(inviteCode: string, hostUid: string, themeId
     if (data.hostId !== hostUid) throw new Error("Only host can set theme");
     if (data.status !== "waiting") throw new Error("Game already started");
 
+    const prevSettings = data?.settings ?? null;
+    const usedWordsByTheme: Record<string, string[]> =
+      prevSettings?.usedWordsByTheme && typeof prevSettings.usedWordsByTheme === "object" ? prevSettings.usedWordsByTheme : {};
+
+    const nextSettings = {
+      ...(prevSettings ?? {}),
+      selectedThemeIds: normalized,
+      activeThemeIndex: 0,
+      selectedThemeId: normalized[0] ?? null,
+      usedWordsByTheme,
+    };
+
     tx.set(
       lobbyRef,
       {
-        settings: {
-          selectedThemeId: themeId,
-        },
+        settings: nextSettings,
       },
       { merge: true }
     );
   });
+}
+
+export async function setLobbyTheme(inviteCode: string, hostUid: string, themeId: string) {
+  await setLobbyThemes(inviteCode, hostUid, [themeId]);
 }
 export async function updatePlayerName(inviteCode: string, uid: string, name: string) {
   const ref = doc(db, "lobbies", inviteCode, "players", uid);
@@ -192,6 +214,30 @@ export async function updatePlayerPrefs(
   const ref = doc(db, "lobbies", inviteCode, "players", uid);
   await updateDoc(ref, { avatarType, skin });
 }
+
+export async function updateLobbySettings(inviteCode: string, hostUid: string, patch: Record<string, any>) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+
+  await runTransaction(db, async (tx: Transaction) => {
+    const snap = await tx.get(lobbyRef);
+    if (!snap.exists()) throw new Error("Lobby does not exist");
+
+    const data = snap.data() as any;
+    if (data.hostId !== hostUid) throw new Error("Only host can update settings");
+    if (data.status !== "waiting") throw new Error("Game already started");
+
+    tx.set(
+      lobbyRef,
+      {
+        settings: {
+          ...(patch ?? {}),
+        },
+      },
+      { merge: true }
+    );
+  });
+}
+
 /* -------- START GAME (UPDATED FOR CATEGORY HINT) -------- */
 export async function startGame(
   inviteCode: string,
@@ -224,6 +270,31 @@ export async function startGame(
 
     const lobbyData = lobbySnap.data() as any;
 
+    const settings = lobbyData?.settings ?? null;
+    const selectedThemeIds: string[] = Array.isArray(settings?.selectedThemeIds)
+      ? settings.selectedThemeIds
+      : settings?.selectedThemeId
+        ? [settings.selectedThemeId]
+        : [];
+
+    const usedWordsByTheme: Record<string, string[]> =
+      settings?.usedWordsByTheme && typeof settings.usedWordsByTheme === "object" ? settings.usedWordsByTheme : {};
+    const usedForTheme = Array.isArray(usedWordsByTheme?.[themeId]) ? usedWordsByTheme[themeId] : [];
+    if (usedForTheme.includes(word)) {
+      throw new Error("Word already used for this theme");
+    }
+
+    const activeThemeIndex = selectedThemeIds.includes(themeId) ? selectedThemeIds.indexOf(themeId) : 0;
+    const nextUsedWordsByTheme = { ...usedWordsByTheme, [themeId]: [...usedForTheme, word] };
+
+    const nextSettings = {
+      ...(settings ?? {}),
+      selectedThemeIds,
+      activeThemeIndex,
+      selectedThemeId: themeId,
+      usedWordsByTheme: nextUsedWordsByTheme,
+    };
+
     if (lobbyData?.hostId !== hostUid) throw new Error("Only host can start");
     if (lobbyData?.status === "started") return;
 
@@ -231,6 +302,7 @@ export async function startGame(
       lobbyRef,
       {
         status: "started",
+        settings: nextSettings,
         game: {
           startedAt: serverTimestamp(),
           themeId,
@@ -247,6 +319,7 @@ export async function startGame(
             turnIndex: 0,
             turnUid: playerUids[0],
             log: [],
+            turnStartedAt: Date.now(),
           },
 
           votes: {},
@@ -328,7 +401,14 @@ export async function goToChatPhase(inviteCode: string, hostUid: string) {
 
     tx.set(
       lobbyRef,
-      { game: { phase: "chat" } },
+      {
+        game: {
+          phase: "chat",
+          chat: {
+            turnStartedAt: Date.now(),
+          },
+        },
+      },
       { merge: true }
     );
   });
@@ -448,6 +528,8 @@ export async function submitChatWord(inviteCode: string, playerUid: string, rawT
       turnUid: nextTurnUid,
       log: nextLog,
 
+      turnStartedAt: Date.now(),
+
       // ✅ nullstill typing når ord sendes
       typingUid: null,
       typingAt: Date.now(),
@@ -514,21 +596,154 @@ export async function submitVote(inviteCode: string, voterUid: string, targetUid
 
     const imposterUid: string = game.imposterUid;
     const winner: "crew" | "imposter" = eliminatedUid === imposterUid ? "crew" : "imposter";
-    const loser: "crew" | "imposter" = winner === "crew" ? "imposter" : "crew"; // ✅ NYTT
+    const loser: "crew" | "imposter" = winner === "crew" ? "imposter" : "crew";
+
+    const nextPhase = eliminatedUid === imposterUid ? "imposter_guess" : "result";
 
     tx.set(
       lobbyRef,
       {
         game: {
           votes: nextVotes,
-          phase: "result",
+          phase: nextPhase,
           result: {
             winner,
-            loser,        // ✅ NYTT
+            loser,
+            eliminatedUid,
+          },
+          imposterGuess: eliminatedUid === imposterUid
+            ? {
+                uid: imposterUid,
+                text: "",
+                submitted: false,
+                finalGuess: null,
+                correct: null,
+                startedAt: Date.now(),
+                updatedAt: Date.now(),
+              }
+            : null,
+        },
+        status: "finished",
+      },
+      { merge: true }
+    );
+  });
+}
+
+export async function setImposterGuessTyping(inviteCode: string, uid: string, text: string) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+
+  await runTransaction(db, async (tx: Transaction) => {
+    const snap = await tx.get(lobbyRef);
+    if (!snap.exists()) throw new Error("Lobby does not exist");
+
+    const data = snap.data() as any;
+    const game = data.game;
+    if (!game) throw new Error("No game");
+    if (game.phase !== "imposter_guess") throw new Error("Imposter guess is not active");
+
+    const imposterGuess = game.imposterGuess;
+    const imposterUid: string = game.imposterUid;
+    if (uid !== imposterUid) throw new Error("Only imposter can type guess");
+    if (imposterGuess?.submitted) return;
+
+    const safe = (text ?? "").toString().slice(0, 64);
+
+    tx.set(
+      lobbyRef,
+      {
+        game: {
+          imposterGuess: {
+            text: safe,
+            updatedAt: Date.now(),
+          },
+        },
+      },
+      { merge: true }
+    );
+  });
+}
+
+export async function submitImposterGuess(inviteCode: string, uid: string, rawText: string) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+
+  const text = normalizeOneWord(rawText);
+  if (!text) throw new Error("You must submit exactly ONE word");
+
+  await runTransaction(db, async (tx: Transaction) => {
+    const snap = await tx.get(lobbyRef);
+    if (!snap.exists()) throw new Error("Lobby does not exist");
+
+    const data = snap.data() as any;
+    const game = data.game;
+    if (!game) throw new Error("No game");
+    if (game.phase !== "imposter_guess") throw new Error("Imposter guess is not active");
+
+    const imposterUid: string = game.imposterUid;
+    if (uid !== imposterUid) throw new Error("Only imposter can submit guess");
+
+    const secretWord = normalizeOneWord((game.word ?? "").toString())?.toLowerCase() ?? "";
+    const attempted = text.toLowerCase();
+    const correct = !!secretWord && attempted === secretWord;
+
+    const winner: "crew" | "imposter" = correct ? "imposter" : "crew";
+    const loser: "crew" | "imposter" = winner === "crew" ? "imposter" : "crew";
+    const eliminatedUid: string = game?.result?.eliminatedUid ?? imposterUid;
+
+    tx.set(
+      lobbyRef,
+      {
+        game: {
+          phase: "result",
+          imposterGuess: {
+            uid: imposterUid,
+            text: "",
+            submitted: true,
+            finalGuess: text,
+            correct,
+            updatedAt: Date.now(),
+          },
+          result: {
+            winner,
+            loser,
             eliminatedUid,
           },
         },
         status: "finished",
+      },
+      { merge: true }
+    );
+  });
+}
+
+export async function submitPostGameChat(inviteCode: string, uid: string, rawText: string) {
+  const lobbyRef = doc(db, "lobbies", inviteCode);
+  const text = (rawText ?? "").toString().trim().replace(/[\u200B-\u200D\uFEFF]/g, "");
+  if (!text) throw new Error("Message cannot be empty");
+
+  const clipped = text.length > 220 ? text.slice(0, 220) : text;
+
+  await runTransaction(db, async (tx: Transaction) => {
+    const snap = await tx.get(lobbyRef);
+    if (!snap.exists()) throw new Error("Lobby does not exist");
+
+    const data = snap.data() as any;
+    const game = data.game;
+    if (!game) throw new Error("No game");
+    if (game.phase !== "result") throw new Error("Post-game chat is not active");
+
+    const postChat = game.postChat;
+    const log = Array.isArray(postChat?.log) ? postChat.log : [];
+    const nextLog = [...log, { uid, text: clipped, at: Date.now() }].slice(-200);
+
+    tx.set(
+      lobbyRef,
+      {
+        game: {
+          postChat: {
+            log: nextLog,
+          },
+        },
       },
       { merge: true }
     );
@@ -545,13 +760,55 @@ export async function resetGame(inviteCode: string, hostUid: string) {
     const data = snap.data() as any;
     if (data.hostId !== hostUid) throw new Error("Only host can reset");
 
+    const settings = data?.settings ?? null;
+    const selectedThemeIds: string[] = Array.isArray(settings?.selectedThemeIds)
+      ? settings.selectedThemeIds
+      : settings?.selectedThemeId
+        ? [settings.selectedThemeId]
+        : [];
+
+    const usedWordsByTheme: Record<string, string[]> =
+      settings?.usedWordsByTheme && typeof settings.usedWordsByTheme === "object" ? settings.usedWordsByTheme : {};
+
+    if (selectedThemeIds.length < 2) {
+      const nextSettings = {
+        ...(settings ?? {}),
+        selectedThemeIds: [],
+        activeThemeIndex: 0,
+        selectedThemeId: null,
+        usedWordsByTheme,
+      };
+
+      tx.set(
+        lobbyRef,
+        {
+          status: "waiting",
+          game: deleteField(),
+          settings: nextSettings,
+        },
+        { merge: true }
+      );
+      return;
+    }
+
+    const prevIndex: number = typeof settings?.activeThemeIndex === "number" ? settings.activeThemeIndex : 0;
+    const nextIndex = (prevIndex + 1) % selectedThemeIds.length;
+    const nextThemeId = selectedThemeIds[nextIndex] ?? null;
+
+    const nextSettings = {
+      ...(settings ?? {}),
+      selectedThemeIds,
+      activeThemeIndex: nextIndex,
+      selectedThemeId: nextThemeId,
+      usedWordsByTheme,
+    };
+
     tx.set(
       lobbyRef,
       {
         status: "waiting",
         game: deleteField(),
-        // behold tema-valget (valgfritt)
-        // settings: { selectedThemeId: null },
+        settings: nextSettings,
       },
       { merge: true }
     );

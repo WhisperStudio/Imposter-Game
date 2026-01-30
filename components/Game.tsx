@@ -12,6 +12,7 @@ import { AstronautAvatar } from "./avatars/AstronautAvatar";
 import ChatPanel from "@/components/ChatPanel";
 import VotePanel from "@/components/VotePanel";
 import ResultPanel from "@/components/ResultPanel";
+import ImposterGuessPanel from "@/components/ImposterGuessPanel";
 import { goToChatPhase } from "@/firebase/lobby";
 
 function useIsMobile(breakpoint = 768) {
@@ -36,15 +37,28 @@ type GameData = {
   themeId?: string;
   imposterUid?: string;
   imposterHint?: string;
-  phase?: "reveal" | "chat" | "vote" | "result";
+  phase?: "reveal" | "chat" | "vote" | "imposter_guess" | "result";
   votes?: Record<string, string>;
-  result?: { winner: "crew" | "imposter"; eliminatedUid: string } | null;
+  result?: { winner: "crew" | "imposter"; loser?: "crew" | "imposter"; eliminatedUid: string } | null;
   chat?: {
     round: number;
     turnIndex: number;
     turnUid: string;
     log: Array<{ uid: string; text: string; round: number; index: number; at: number }>;
+    turnStartedAt?: number;
   };
+  imposterGuess?: {
+    uid: string;
+    text: string;
+    submitted?: boolean;
+    finalGuess?: string | null;
+    correct?: boolean | null;
+    startedAt?: number;
+    updatedAt?: number;
+  } | null;
+  postChat?: {
+    log: Array<{ uid: string; text: string; at: number }>;
+  } | null;
   assignments?: Record<string, { role: "imposter" | "word" }>;
 };
 
@@ -55,10 +69,11 @@ type GameProps = {
   game: GameData | null | undefined;
   isHost: boolean;
   hostUid: string;
+  lobbySettings?: any;
   
 };
 
-export default function Game({ inviteCode, players, myUid, game, isHost, hostUid }: GameProps) {
+export default function Game({ inviteCode, players, myUid, game, isHost, hostUid, lobbySettings }: GameProps) {
   // Avatar prefs
   const [avatarType, setAvatarType] = useState<AvatarType>("classicAstronaut");
   const [skin, setSkin] = useState<AvatarSkin>("classic");
@@ -84,6 +99,11 @@ export default function Game({ inviteCode, players, myUid, game, isHost, hostUid
 const showMiniCardInChatMobile = isMobile && phase === "chat";
 const activeTurnUid = phase === "chat" ? game?.chat?.turnUid : null;
 const typingUid = phase === "chat" ? (game as any)?.chat?.typingUid ?? null : null;
+
+  const perTurnTimerSeconds: number | null =
+    typeof lobbySettings?.perTurnTimerSeconds === "number" && lobbySettings.perTurnTimerSeconds > 0
+      ? lobbySettings.perTurnTimerSeconds
+      : null;
 
 
 
@@ -116,6 +136,7 @@ const skinByUid = useMemo(() => {
           {phase === "reveal" && "SECURE CHANNEL ESTABLISHED"}
           {phase === "chat" && "AUDIO CHANNELS OPEN"}
           {phase === "vote" && "VOTING IN PROGRESS"}
+          {phase === "imposter_guess" && "IMPOSTER FINAL TRANSMISSION"}
           {phase === "result" && "MISSION REPORT"}
         </GameStatusBadge>
         <PhaseIndicator>
@@ -241,6 +262,7 @@ const skinByUid = useMemo(() => {
             avatarSize={26}
             secretWord={game.word ?? null}
             isImposter={isImposter}
+            perTurnTimerSeconds={perTurnTimerSeconds}
           />
         </ChatShellMobile>
       </AttachedStack>
@@ -257,6 +279,7 @@ const skinByUid = useMemo(() => {
           avatarSize={26}
           secretWord={game.word ?? null}
           isImposter={isImposter}
+          perTurnTimerSeconds={perTurnTimerSeconds}
         />
       </GlassPanel>
     )}
@@ -275,13 +298,26 @@ const skinByUid = useMemo(() => {
   />
 )}
 
+  {phase === "imposter_guess" && game?.result?.eliminatedUid && game?.imposterUid && (
+    <ImposterGuessPanel
+      inviteCode={inviteCode}
+      myUid={myUid}
+      players={players}
+      imposterUid={game.imposterUid}
+      eliminatedUid={game.result.eliminatedUid}
+      imposterGuess={(game as any)?.imposterGuess ?? null}
+    />
+  )}
+
 
   {phase === "result" && game?.result && game?.imposterUid && (
     <ResultPanel
       inviteCode={inviteCode}
+      myUid={myUid}
       players={players}
       imposterUid={game.imposterUid}
       result={game.result as any}
+      postChat={(game as any)?.postChat ?? null}
       isHost={isHost}
       hostUid={hostUid}
     />

@@ -22,6 +22,7 @@ type ChatState = {
   turnIndex: number;
   turnUid: string;
   log: ChatLogItem[];
+  turnStartedAt?: number;
 };
 
 type Props = {
@@ -35,6 +36,7 @@ type Props = {
   secretWord?: string | null;
   isImposter?: boolean;
   readOnly?: boolean;
+  perTurnTimerSeconds?: number | null;
 };
 
 export default function ChatPanel({
@@ -46,14 +48,18 @@ export default function ChatPanel({
   skinByUid = {},
   secretWord = null,
   isImposter = false,
-  readOnly = false, 
+  readOnly = false,
+  perTurnTimerSeconds = null,
 }: Props) {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
   const feedEndRef = useRef<HTMLDivElement>(null);
   const isMyTurn = chat.turnUid === myUid;
+  const autoSentRef = useRef<string | null>(null);
 
   const nameByUid = useMemo(() => {
     const m = new Map<string, string>();
@@ -64,22 +70,72 @@ export default function ChatPanel({
   const turnName = nameByUid.get(chat.turnUid) ?? "UNKNOWN";
 
   useEffect(() => {
+    if (readOnly) {
+      setSecondsLeft(null);
+      return;
+    }
+    if (!perTurnTimerSeconds || perTurnTimerSeconds <= 0) {
+      setSecondsLeft(null);
+      return;
+    }
+
+    const startedAt = typeof chat.turnStartedAt === "number" ? chat.turnStartedAt : Date.now();
+    autoSentRef.current = null;
+
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const left = Math.max(0, Math.ceil(perTurnTimerSeconds - elapsed));
+      setSecondsLeft(left);
+    };
+
+    tick();
+    const interval = setInterval(tick, 250);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [readOnly, perTurnTimerSeconds, chat.turnStartedAt, chat.turnUid, chat.turnIndex, chat.round]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    if (!perTurnTimerSeconds || perTurnTimerSeconds <= 0) return;
+    if (!isMyTurn) return;
+    if (sending) return;
+    if (secondsLeft === null) return;
+    if (secondsLeft > 0) return;
+
+    const startedAt = typeof chat.turnStartedAt === "number" ? chat.turnStartedAt : 0;
+    const key = `${chat.turnUid}-${chat.turnIndex}-${chat.round}-${startedAt}`;
+    if (autoSentRef.current === key) return;
+    autoSentRef.current = key;
+
+    setSending(true);
+    submitChatWord(inviteCode, myUid, "skip")
+      .then(() => setInput(""))
+      .catch(() => {})
+      .finally(async () => {
+        setSending(false);
+        await setTyping(inviteCode, myUid, false).catch(() => {});
+      });
+  }, [readOnly, perTurnTimerSeconds, isMyTurn, secondsLeft, sending, inviteCode, myUid, chat.turnUid, chat.turnIndex, chat.round, chat.turnStartedAt]);
+
+  useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat.log]);
+
   useEffect(() => {
-  if (readOnly) return;
-  if (!inviteCode || !myUid) return;
+    if (readOnly) return;
+    if (!inviteCode || !myUid) return;
 
-  // bare den som har turen skal sette typing
-  if (!isMyTurn) return;
+    // bare den som har turen skal sette typing
+    if (!isMyTurn) return;
 
-  const hasText = input.trim().length > 0;
-  const t = setTimeout(() => {
-    setTyping(inviteCode, myUid, hasText).catch(() => {});
-  }, 250);
+    const hasText = input.trim().length > 0;
+    const t = setTimeout(() => {
+      setTyping(inviteCode, myUid, hasText).catch(() => {});
+    }, 250);
 
-  return () => clearTimeout(t);
-}, [input, inviteCode, myUid, isMyTurn, readOnly]);
+    return () => clearTimeout(t);
+  }, [input, inviteCode, myUid, isMyTurn, readOnly]);
 
   const handleSend = async () => {
     setError(null);
@@ -98,11 +154,10 @@ export default function ChatPanel({
       setInput("");
     } catch (e: any) {
       setError("UPLINK ERROR");
-   } finally {
-  setSending(false);
-  await setTyping(inviteCode, myUid, false).catch(() => {});
-}
-
+    } finally {
+      setSending(false);
+      await setTyping(inviteCode, myUid, false).catch(() => {});
+    }
   };
 
   const groupedLog = useMemo(() => {
@@ -137,6 +192,9 @@ export default function ChatPanel({
         <HeaderTech>
             <FaSatelliteDish /> 
             <span>R-{chat.round}</span>
+            {secondsLeft !== null && (
+              <TimerPill $danger={secondsLeft <= 5}>{secondsLeft}s</TimerPill>
+            )}
         </HeaderTech>
       </HeaderPanel>
 
@@ -289,10 +347,21 @@ const HeaderTech = styled.div`
     padding: 2px 8px; background: rgba(56, 189, 248, 0.1);
 `;
 
+const TimerPill = styled.span<{ $danger?: boolean }>`
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid ${props => props.$danger ? "rgba(239,68,68,0.35)" : "rgba(56,189,248,0.35)"};
+  background: ${props => props.$danger ? "rgba(239,68,68,0.12)" : "rgba(56,189,248,0.10)"};
+  color: ${props => props.$danger ? "#fca5a5" : "#7dd3fc"};
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+`;
+
 const StatusLight = styled.div<{ $active: boolean }>`
   width: 8px; height: 8px; border-radius: 50%;
-  background: ${({ $active }) => $active ? "#22c55e" : "#ef4444"};
-  box-shadow: 0 0 8px ${({ $active }) => $active ? "#22c55e" : "#ef4444"};
+  background: ${props => props.$active ? "#22c55e" : "#ef4444"};
+  box-shadow: 0 0 8px ${props => props.$active ? "#22c55e" : "#ef4444"};
 `;
 
 /* FEED AREA */
