@@ -9,6 +9,7 @@ import ElectricAvatarPanel from "@/components/ElectricAvatarPanel";
 import Lobby from "@/components/Lobby";
 import Themes, { WORD_DATA } from "@/components/Themes";
 import Game from "@/components/Game";
+import OneDeviceGame from "@/components/OneDeviceGame";
 import SettingsPanel from "@/components/settings";
 
 import { PlayerAvatar } from "@/components/avatars/PlayerAvatar";
@@ -162,6 +163,7 @@ const [myPlayer, setMyPlayer] = useState<Player | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [oneDeviceMode, setOneDeviceMode] = useState(false);
 
   const handleExitLobby = useCallback(async () => {
     if (!inviteCode || !myPlayer) return;
@@ -533,15 +535,23 @@ const handleStartGame = useCallback(async () => {
           )}
 
           {!inviteCode && (
-            <Title data-text="Imposter Game" className={orbitron.className}>
-              Imposter Game
-              <span className="scan" />
-            </Title>
+            <TitleBlock>
+              <TitleSub className={orbitron.className}>FIND THE</TitleSub>
+              <Title data-text="IMPOSTER" className={orbitron.className}>
+                IMPOSTER
+                <TitleGlitch aria-hidden="true" className={orbitron.className}>IMPOSTER</TitleGlitch>
+                <TitleGlitch2 aria-hidden="true" className={orbitron.className}>IMPOSTER</TitleGlitch2>
+                <TitleShine />
+              </Title>
+              <TitleTagline>Social deduction at its finest</TitleTagline>
+            </TitleBlock>
           )}
 
 
           {/* ✅ game view */}
-          {isInGame ? (
+          {oneDeviceMode ? (
+  <OneDeviceGame onBack={() => setOneDeviceMode(false)} />
+) : isInGame ? (
   <Game
     inviteCode={inviteCode}
     players={orderedPlayers}
@@ -559,8 +569,7 @@ const handleStartGame = useCallback(async () => {
     onJoinGame={handleJoinGame}
     onCreateGame={handleCreateGame}
     onHyperspeed={(v) => setHyperspeed(v)}
-
-    
+    onOneDevice={() => setOneDeviceMode(true)}
   />
 ) : showThemes ? (
   // ✅ THEMES
@@ -757,76 +766,161 @@ const Star = styled.div<{
   animation-delay: ${({ $delay }) => $delay}s;
 `;
 
-const impostorFlicker = keyframes`
-  0%, 100% { opacity: 1; transform: translateY(0); }
-  50%      { opacity: 0.98; transform: translateY(0.5px); }
+const glitchAnim1 = keyframes`
+  0%, 100% { clip-path: inset(0 0 0 0); transform: translate(0); }
+  5% { clip-path: inset(20% 0 60% 0); transform: translate(-4px, 2px); }
+  10% { clip-path: inset(0 0 0 0); transform: translate(0); }
+  15% { clip-path: inset(70% 0 5% 0); transform: translate(3px, -1px); }
+  20% { clip-path: inset(0 0 0 0); transform: translate(0); }
 `;
 
-const glitchShift = keyframes`
-  0%   { transform: translate(0,0); opacity: 0; }
-  8%   { transform: translate(0,0); opacity: 0; }
-  10%  { transform: translate(1px,0); opacity: 0.12; }
-  12%  { transform: translate(-1px,0); opacity: 0.10; }
-  14%  { transform: translate(0,0); opacity: 0; }
-  100% { transform: translate(0,0); opacity: 0; }
-`;
-
-const scanSweep = keyframes`
-  0%   { transform: translateY(-120%); opacity: 0; }
-  10%  { opacity: 0.18; }
-  50%  { opacity: 0.12; }
-  100% { transform: translateY(140%); opacity: 0; }
+const glitchAnim2 = keyframes`
+  0%, 100% { clip-path: inset(0 0 0 0); transform: translate(0); }
+  5% { clip-path: inset(50% 0 20% 0); transform: translate(4px, -2px); }
+  10% { clip-path: inset(0 0 0 0); transform: translate(0); }
+  15% { clip-path: inset(10% 0 75% 0); transform: translate(-3px, 1px); }
+  20% { clip-path: inset(0 0 0 0); transform: translate(0); }
 `;
 
 const bloodPulse = keyframes`
   0%, 100% {
-    filter: drop-shadow(0 2px 10px rgba(0,0,0,0.9))
-            drop-shadow(0 0 18px rgba(220,38,38,0.35))
-            drop-shadow(0 0 34px rgba(220,38,38,0.18));
+    text-shadow:
+      0 0 7px rgba(255, 45, 85, 0.4),
+      0 0 20px rgba(255, 45, 85, 0.2),
+      0 0 42px rgba(220, 38, 38, 0.15),
+      0 4px 12px rgba(0, 0, 0, 0.9);
   }
   50% {
-    filter: drop-shadow(0 2px 12px rgba(0,0,0,0.95))
-            drop-shadow(0 0 26px rgba(255,45,85,0.55))
-            drop-shadow(0 0 46px rgba(255,45,85,0.26));
+    text-shadow:
+      0 0 10px rgba(255, 45, 85, 0.6),
+      0 0 30px rgba(255, 45, 85, 0.35),
+      0 0 60px rgba(220, 38, 38, 0.25),
+      0 4px 12px rgba(0, 0, 0, 0.9);
   }
 `;
 
 const shineSweep = keyframes`
-  0%   { transform: translateX(-130%) skewX(-20deg); opacity: 0; }
-  12%  { opacity: 0.0; }
-  22%  { opacity: 0.35; }
-  32%  { opacity: 0.0; }
-  100% { transform: translateX(130%) skewX(-20deg); opacity: 0; }
+  0%   { transform: translateX(-150%) skewX(-20deg); opacity: 0; }
+  15%  { opacity: 0; }
+  50%  { opacity: 0.25; }
+  85%  { opacity: 0; }
+  100% { transform: translateX(150%) skewX(-20deg); opacity: 0; }
+`;
+
+const fadeInUp = keyframes`
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const TitleBlock = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 2rem;
+  animation: ${fadeInUp} 0.8s ease-out;
+`;
+
+const TitleSub = styled.div`
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.5em;
+  color: rgba(148, 163, 184, 0.7);
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+
+  @media (max-width: 768px) {
+    font-size: 0.75rem;
+    letter-spacing: 0.4em;
+  }
 `;
 
 const Title = styled.h1`
   position: relative;
   text-align: center;
-  margin: 0 0 2rem;
-
-  font-size: 3.6rem;
+  margin: 0;
+  font-size: clamp(3.5rem, 10vw, 6.5rem);
   font-weight: 900;
-  letter-spacing: 0.03em;
-  line-height: 1.05;
-
-  /* ✅ “imposter red” men fortsatt leslig */
-  color: #ff2d55; /* hot blood */
-  text-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.95),
-    0 0 14px rgba(220, 38, 38, 0.45),
-    0 0 28px rgba(220, 38, 38, 0.22);
-
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: transparent;
+  background: linear-gradient(180deg, #ff2d55 0%, #dc2626 50%, #991b1b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   animation: ${bloodPulse} 3.8s ease-in-out infinite;
+  -webkit-text-stroke: 1px rgba(255, 45, 85, 0.3);
+`;
 
- 
+const TitleGlitch = styled.span`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #ff2d55 0%, #dc2626 50%, #991b1b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: ${glitchAnim1} 4s infinite;
+  opacity: 0.6;
+`;
 
- 
+const TitleGlitch2 = styled.span`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #3b82f6 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: ${glitchAnim2} 4s infinite 0.05s;
+  opacity: 0.3;
+`;
+
+const TitleShine = styled.span`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 45%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0.15) 55%,
+    transparent 100%
+  );
+  animation: ${shineSweep} 6s ease-in-out infinite;
+  pointer-events: none;
+`;
+
+const TitleTagline = styled.div`
+  font-size: 0.9rem;
+  color: rgba(148, 163, 184, 0.5);
+  letter-spacing: 0.15em;
+  margin-top: 0.75rem;
+  font-style: italic;
 
   @media (max-width: 768px) {
-    font-size: 2.6rem;
+    font-size: 0.75rem;
   }
 `;
 
+const TitleTagline = styled.div`
+  font-size: 0.9rem;
+  color: rgba(148, 163, 184, 0.5);
+  letter-spacing: 0.15em;
+  margin-top: 0.75rem;
+  font-style: italic;
+
+  @media (max-width: 768px) {
+    font-size: 0.75rem;
+  }
+`;
 
 const GlowEffect = styled.div`
   position: absolute;

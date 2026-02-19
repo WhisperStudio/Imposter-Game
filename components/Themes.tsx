@@ -302,36 +302,48 @@ const gradientFlow = keyframes`
   100% { background-position: 0% 50%; }
 `;
 
+const fadeSlideIn = keyframes`
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
 const ThemesContainer = styled.div`
   width: 100%;
-  max-width: 1200px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 2rem;
-  background: #1e293b;
-  border-radius: 0.7rem;
-  box-shadow: 0 2px 20px 2px #737884;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
   position: relative;
-  padding-bottom: 6rem;
+  padding-bottom: 5.5rem;
+  animation: ${fadeSlideIn} 0.4s ease-out;
 `;
 
 const BackButton = styled.button`
-position: absolute;
-top: -150px;
-left: -40px;
-  background: #374151;
-  color: #e5e7eb;
-  border: none;
+  position: absolute;
+  top: -50px;
+  left: 0;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(8px);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
+  border-radius: 10px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 1.25rem;
-  transition: background-color 0.2s;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
 
   &:hover {
-    background: #4b5563;
+    background: rgba(30, 41, 59, 1);
+    color: #e2e8f0;
+    transform: translateX(-2px);
   }
 `;
 
@@ -345,22 +357,20 @@ const ThemesHeader = styled.h2`
 const GlowingBorder = styled.div`
   position: relative;
   padding: 2px;
-  border-radius: 0.75rem;
-  background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b);
-  background-size: 300% 300%;
-  animation: ${gradientFlow} 8s ease infinite;
-  max-width: 1240px;
-  margin: 1.25rem auto;
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ff2d55, #dc2626, #ff2d55);
+  background-size: 200% 200%;
+  animation: ${gradientFlow} 4s ease infinite;
+  margin: 0 auto 1.5rem;
+  box-shadow: 0 0 20px rgba(255, 45, 85, 0.15);
 `;
 
 const FeaturedThemes = styled.div`
   display: flex;
   flex-direction: column;
-  background: #2d3748;
-  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.95);
+  border-radius: 16px;
   padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   align-items: center;
   text-align: center;
   width: 100%;
@@ -368,48 +378,45 @@ const FeaturedThemes = styled.div`
 
 const FeaturedTitle = styled.h3`
   color: #e2e8f0;
-  font-size: 1.1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
   margin-bottom: 1rem;
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-
-  &::before,
-  &::after {
-    content: "★";
-    color: #f6e05e;
-  }
+  color: #94a3b8;
 `;
 
 const FeaturedThemesGrid = styled.div`
   width: 100%;
-  max-width: 860px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.6rem;
 `;
 
 const FeaturedThemeButton = styled.button<{ $isSelected: boolean }>`
   position: relative;
   overflow: hidden;
-  border: none;
-  border-radius: 14px;
-  padding: 0.75rem 0.9rem;
+  border: 2px solid ${({ $isSelected }) => ($isSelected ? "rgba(255, 45, 85, 0.5)" : "rgba(255,255,255,0.06)")};
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
   cursor: pointer;
-  color: ${({ $isSelected }) => ($isSelected ? "#fff" : "#e5e7eb")};
-  background: ${({ $isSelected }) => ($isSelected ? "rgba(59,130,246,0.85)" : "rgba(31,41,55,0.7)")};
-  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+  color: ${({ $isSelected }) => ($isSelected ? "#fff" : "#cbd5e1")};
+  background: ${({ $isSelected }) =>
+    $isSelected ? "rgba(255, 45, 85, 0.15)" : "rgba(30, 41, 59, 0.5)"};
+  transition: all 0.2s ease;
   text-align: left;
   font-weight: 700;
+  font-size: 0.9rem;
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 24px rgba(59, 130, 246, 0.18);
-    background: ${({ $isSelected }) => ($isSelected ? "#2563eb" : "#374151")};
+    border-color: ${({ $isSelected }) =>
+      $isSelected ? "rgba(255, 45, 85, 0.7)" : "rgba(255,255,255,0.15)"};
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   }
 
   &:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -422,8 +429,8 @@ const GlareEffect = styled.span<{ $show: boolean }>`
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 200, 221, 0.25) 25%,
-    rgba(255, 200, 221, 0.3) 45%,
+    rgba(255, 200, 221, 0.2) 25%,
+    rgba(255, 200, 221, 0.25) 45%,
     rgba(255, 255, 255, 0) 100%
   );
   transform: translateX(${({ $show }) => ($show ? "200%" : "-100%")});
@@ -434,59 +441,50 @@ const GlareEffect = styled.span<{ $show: boolean }>`
 const CheckDot = styled.span<{ $isSelected: boolean }>`
   display: inline-grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  margin-right: 8px;
-  background: ${({ $isSelected }) => ($isSelected ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.08)")};
-  font-size: 12px;
+  margin-right: 6px;
+  background: ${({ $isSelected }) => ($isSelected ? "rgba(255, 45, 85, 0.4)" : "rgba(255,255,255,0.06)")};
+  font-size: 11px;
   font-weight: 900;
+  border: 1.5px solid ${({ $isSelected }) => ($isSelected ? "rgba(255, 45, 85, 0.6)" : "rgba(255,255,255,0.1)")};
 `;
 
 const CategoryNav = styled.div`
-  margin-top: 1.25rem;
+  margin-top: 1.5rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.5rem;
   justify-content: center;
 `;
 
 const CategoryBtn = styled.button<{ $active: boolean }>`
-  border: none;
-  border-radius: 12px;
-  padding: 0.7rem 1rem;
+  border: 1.5px solid ${({ $active }) => ($active ? "rgba(255, 45, 85, 0.4)" : "rgba(255,255,255,0.08)")};
+  border-radius: 10px;
+  padding: 0.55rem 1rem;
   cursor: pointer;
-  font-weight: 800;
-  letter-spacing: 0.2px;
-
-  background: ${({ $active }) => ($active ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "#374151")};
-  color: ${({ $active }) => ($active ? "#fff" : "#e5e7eb")};
-  box-shadow: ${({ $active }) => ($active ? "0 10px 24px rgba(102,126,234,0.25)" : "none")};
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.3px;
+  background: ${({ $active }) => ($active ? "rgba(255, 45, 85, 0.12)" : "rgba(30, 41, 59, 0.4)")};
+  color: ${({ $active }) => ($active ? "#ff2d55" : "#94a3b8")};
+  transition: all 0.2s ease;
 
   &:hover {
-    opacity: 0.95;
+    color: ${({ $active }) => ($active ? "#ff2d55" : "#e2e8f0")};
+    border-color: ${({ $active }) => ($active ? "rgba(255, 45, 85, 0.6)" : "rgba(255,255,255,0.15)")};
     transform: translateY(-1px);
   }
 `;
 
 const OptionsPanel = styled.div`
-  margin-top: 1.25rem;
-  background: rgba(15, 23, 42, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 1rem;
+  background: rgba(30, 41, 59, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 16px;
   padding: 1.25rem;
-  animation: fadeIn 0.25s ease;
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
+  animation: ${fadeSlideIn} 0.25s ease-out;
 `;
 
 const OptionsTitle = styled.div`
@@ -495,68 +493,80 @@ const OptionsTitle = styled.div`
   justify-content: space-between;
   gap: 1rem;
   color: #e2e8f0;
-  font-weight: 900;
+  font-weight: 800;
+  font-size: 1rem;
   margin-bottom: 0.75rem;
 `;
 
 const SmallHint = styled.span`
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 `;
 
 const OptionsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
 `;
 
 const OptionCard = styled.button<{ $selected: boolean }>`
   position: relative;
   border-radius: 14px;
-  padding: 1rem;
-  border: 2px solid ${({ $selected }) => ($selected ? "transparent" : "rgba(255,255,255,0.08)")};
-  background: ${({ $selected }) => ($selected ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "rgba(30,41,59,0.45)")};
-  color: ${({ $selected }) => ($selected ? "#fff" : "#e5e7eb")};
+  padding: 1rem 0.85rem;
+  border: 2px solid ${({ $selected }) => ($selected ? "rgba(255, 45, 85, 0.45)" : "rgba(255,255,255,0.06)")};
+  background: ${({ $selected }) =>
+    $selected ? "rgba(255, 45, 85, 0.1)" : "rgba(15, 23, 42, 0.5)"};
+  color: ${({ $selected }) => ($selected ? "#fff" : "#cbd5e1")};
   cursor: pointer;
   text-align: left;
-  transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
 
   &:hover {
     transform: translateY(-3px);
-    box-shadow: 0 16px 28px rgba(0, 0, 0, 0.28);
-    border-color: ${({ $selected }) => ($selected ? "transparent" : "rgba(102,126,234,0.45)")};
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    border-color: ${({ $selected }) => ($selected ? "rgba(255, 45, 85, 0.7)" : "rgba(255,255,255,0.12)")};
+    background: ${({ $selected }) =>
+      $selected ? "rgba(255, 45, 85, 0.15)" : "rgba(30, 41, 59, 0.5)"};
   }
 
   &:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
   }
 `;
+
 const ItemEmoji = styled.div`
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   line-height: 1;
 `;
 
 const OptionName = styled.div`
-  font-weight: 900;
-  font-size: 1rem;
+  font-weight: 800;
+  font-size: 0.9rem;
 `;
 
 const SelectedBadge = styled.div`
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 22px;
-  height: 22px;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 45, 85, 0.4);
+  border: 1.5px solid rgba(255, 45, 85, 0.6);
   font-weight: 900;
-  font-size: 12px;
+  font-size: 10px;
+  color: #fff;
 `;
 
 const Footer = styled.div`
@@ -565,16 +575,17 @@ const Footer = styled.div`
   left: 0;
   width: 100%;
   padding: 1rem;
-  background: rgba(31, 41, 55, 0.95);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   justify-content: center;
   align-items: center;
-  border-radius: 0 0 0.7rem 0.7rem;
+  border-radius: 0 0 22px 22px;
 `;
 
 const WaitingText = styled.div`
-  color: #94a3b8;
+  color: #64748b;
   font-style: italic;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 `;

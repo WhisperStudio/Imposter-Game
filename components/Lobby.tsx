@@ -1,7 +1,7 @@
 "use client";
 
 import styled from "styled-components";
-import { FaArrowRight, FaUserPlus, FaGamepad, FaSignOutAlt } from "react-icons/fa";
+import { FaArrowRight, FaUserPlus, FaGamepad, FaSignOutAlt, FaMobileAlt } from "react-icons/fa";
 import { useState, useEffect, useMemo } from "react";
 import type { Player } from "@/types/player";
 
@@ -53,6 +53,7 @@ interface LobbyProps {
   // menu actions
   onJoinGame?: (code: string) => void;
   onCreateGame?: () => void;
+  onOneDevice?: () => void;
 
   // room actions
   onContinueToThemes?: () => void;
@@ -74,6 +75,7 @@ export default function Lobby({
   players,
   onJoinGame,
   onCreateGame,
+  onOneDevice,
   onContinueToThemes,
   onExitLobby,
   onHyperspeed,
@@ -204,9 +206,9 @@ export default function Lobby({
 
   return (
     <LobbyContainer>
-      <h2 style={{ fontSize: "2.5rem", color: "#e2e8f0", marginBottom: "1rem", textAlign: "center" }}>
-        {mode === "menu" ? "" : "Lobby"}
-      </h2>
+      {mode === "room" && (
+        <LobbyTitle>Lobby</LobbyTitle>
+      )}
 
       {/* PLAYERS always visible in room mode, optional in menu mode */}
       {mode === "room" && (
@@ -235,12 +237,9 @@ export default function Lobby({
       {/* MENU MODE */}
       {mode === "menu" && (
         <GameControls>
-          <h2 style={{ fontSize: "2.5rem", color: "#e2e8f0", marginBottom: "1rem", textAlign: "center" }}>
-        {mode === "menu" ? "Start" : ""}
-          </h2>
           {!showJoinForm ? (
             <>
-              <Button
+              <MenuButtonLarge
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 onMouseDown={() => toggleHyperspeed(false, 'create game mousedown')}
@@ -249,14 +248,16 @@ export default function Lobby({
                   onCreateGame?.();
                 }}
                 $variant="primary"
-                style={{ width: "100%", justifyContent: "center" }}
               >
-                <FaGamepad /> Create New Game
-              </Button>
+                <MenuBtnIcon><FaGamepad /></MenuBtnIcon>
+                <MenuBtnContent>
+                  <MenuBtnTitle>Create Game</MenuBtnTitle>
+                  <MenuBtnDesc>Start a new lobby and invite friends</MenuBtnDesc>
+                </MenuBtnContent>
+                <MenuBtnArrow><FaArrowRight /></MenuBtnArrow>
+              </MenuButtonLarge>
 
-              <Divider>OR</Divider>
-
-              <Button
+              <MenuButtonLarge
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 onMouseDown={() => toggleHyperspeed(false, 'join game mousedown')}
@@ -265,42 +266,72 @@ export default function Lobby({
                   setShowJoinForm(true);
                 }}
                 $variant="secondary"
-                style={{ width: "100%", justifyContent: "center" }}
               >
-                <FaUserPlus /> Join Existing Game
-              </Button>
+                <MenuBtnIcon><FaUserPlus /></MenuBtnIcon>
+                <MenuBtnContent>
+                  <MenuBtnTitle>Join Game</MenuBtnTitle>
+                  <MenuBtnDesc>Enter an invite code to join</MenuBtnDesc>
+                </MenuBtnContent>
+                <MenuBtnArrow><FaArrowRight /></MenuBtnArrow>
+              </MenuButtonLarge>
+
+              <MenuDivider>
+                <MenuDividerLine />
+                <MenuDividerText>OR PLAY LOCALLY</MenuDividerText>
+                <MenuDividerLine />
+              </MenuDivider>
+
+              <MenuButtonLarge
+                onClick={() => {
+                  toggleHyperspeed(false, 'one device click');
+                  onOneDevice?.();
+                }}
+                $variant="secondary"
+              >
+                <MenuBtnIcon style={{ color: "#3b82f6" }}><FaMobileAlt /></MenuBtnIcon>
+                <MenuBtnContent>
+                  <MenuBtnTitle>One Device</MenuBtnTitle>
+                  <MenuBtnDesc>Pass the phone and play together</MenuBtnDesc>
+                </MenuBtnContent>
+                <MenuBtnArrow><FaArrowRight /></MenuBtnArrow>
+              </MenuButtonLarge>
             </>
           ) : (
-            <>
-              <div style={{ width: "100%", textAlign: "center", marginBottom: "0.5rem" }}>
-                <p style={{ color: "#e2e8f0", marginBottom: "0.5rem" }}>Enter the invite code</p>
-                <Input
-                  type="text"
-                  placeholder="e.g., ABC123"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                  maxLength={6}
-                  style={{ textAlign: "center", letterSpacing: "0.5em" }}
-                />
-              </div>
-              <div style={{ display: "flex", gap: "1rem", width: "100%" }}>
+            <JoinFormCard>
+              <JoinFormTitle>Enter Invite Code</JoinFormTitle>
+              <JoinFormSub>Ask your host for the 6-character code</JoinFormSub>
+              <CodeInputRow>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <CodeChar key={i} $filled={!!inviteCode[i]}>
+                    {inviteCode[i] || ""}
+                  </CodeChar>
+                ))}
+              </CodeInputRow>
+              <HiddenCodeInput
+                type="text"
+                autoFocus
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+                maxLength={6}
+              />
+              <JoinFormActions>
                 <Button
-                   onClick={handleJoinGame}
+                  onClick={handleJoinGame}
                   $variant="primary"
-                  disabled={!inviteCode.trim()}
-                  style={{ flex: 1 }}
+                  disabled={inviteCode.trim().length < 6}
+                  style={{ flex: 1, justifyContent: "center" }}
                 >
-                  Join
+                  Join Lobby
                 </Button>
                 <Button
-                  onClick={() => setShowJoinForm(false)}
+                  onClick={() => { setShowJoinForm(false); setInviteCode(""); }}
                   $variant="secondary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, justifyContent: "center" }}
                 >
-                  Cancel
+                  Back
                 </Button>
-              </div>
-            </>
+              </JoinFormActions>
+            </JoinFormCard>
           )}
         </GameControls>
       )}
@@ -386,6 +417,15 @@ const LobbyContainer = styled.div`
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
+`;
+
+const LobbyTitle = styled.h2`
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  text-align: center;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
 `;
 
 const PlayersGrid = styled.div`
@@ -494,14 +534,173 @@ const GameControls = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.25rem;
+  gap: 1rem;
+  width: 100%;
+  max-width: 480px;
+  margin-top: 0.5rem;
+`;
+
+const MenuButtonLarge = styled.button<{ $variant?: "primary" | "secondary" }>`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid ${({ $variant }) =>
+    $variant === "primary" ? "rgba(255, 45, 85, 0.3)" : "rgba(255, 255, 255, 0.1)"};
+  border-radius: 16px;
+  background: ${({ $variant }) =>
+    $variant === "primary"
+      ? "linear-gradient(135deg, rgba(255, 45, 85, 0.12) 0%, rgba(220, 38, 38, 0.08) 100%)"
+      : "rgba(15, 23, 42, 0.6)"};
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-align: left;
+  backdrop-filter: blur(12px);
+
+  &:hover {
+    transform: translateY(-3px);
+    border-color: ${({ $variant }) =>
+      $variant === "primary" ? "rgba(255, 45, 85, 0.6)" : "rgba(255, 255, 255, 0.2)"};
+    box-shadow: ${({ $variant }) =>
+      $variant === "primary"
+        ? "0 8px 32px rgba(255, 45, 85, 0.15), 0 0 0 1px rgba(255, 45, 85, 0.1)"
+        : "0 8px 32px rgba(0, 0, 0, 0.3)"};
+    background: ${({ $variant }) =>
+      $variant === "primary"
+        ? "linear-gradient(135deg, rgba(255, 45, 85, 0.2) 0%, rgba(220, 38, 38, 0.15) 100%)"
+        : "rgba(30, 41, 59, 0.6)"};
+  }
+
+  &:hover svg:last-child {
+    transform: translateX(4px);
+  }
+`;
+
+const MenuBtnIcon = styled.div`
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: #ff2d55;
+  flex-shrink: 0;
+`;
+
+const MenuBtnContent = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+`;
+
+const MenuBtnTitle = styled.div`
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e2e8f0;
+`;
+
+const MenuBtnDesc = styled.div`
+  font-size: 0.8rem;
+  color: #64748b;
+`;
+
+const MenuBtnArrow = styled.div`
+  font-size: 0.9rem;
+  color: #64748b;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+`;
+
+const MenuDivider = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.25rem 0;
+`;
+
+const MenuDividerLine = styled.div`
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+`;
+
+const MenuDividerText = styled.span`
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #475569;
+  white-space: nowrap;
+`;
+
+const JoinFormCard = styled.div`
   width: 100%;
   max-width: 420px;
-  margin-top: 0.5rem;
   padding: 2rem;
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+`;
+
+const JoinFormTitle = styled.h3`
+  color: #e2e8f0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: 0.5px;
+`;
+
+const JoinFormSub = styled.p`
+  color: #64748b;
+  font-size: 0.85rem;
+  margin: -0.25rem 0 0.5rem;
+`;
+
+const CodeInputRow = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+`;
+
+const CodeChar = styled.div<{ $filled: boolean }>`
+  width: 42px;
+  height: 52px;
+  border-radius: 10px;
+  border: 2px solid ${({ $filled }) => ($filled ? "rgba(255, 45, 85, 0.5)" : "rgba(255, 255, 255, 0.1)")};
+  background: ${({ $filled }) => ($filled ? "rgba(255, 45, 85, 0.08)" : "rgba(0, 0, 0, 0.2)")};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  letter-spacing: 0;
+  font-family: monospace;
+  transition: all 0.15s ease;
+`;
+
+const HiddenCodeInput = styled.input`
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+`;
+
+const JoinFormActions = styled.div`
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 0.5rem;
 `;
 
 const Divider = styled.div`
