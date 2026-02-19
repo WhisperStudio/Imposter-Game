@@ -205,7 +205,7 @@ export default function OneDeviceGame({ onBack }: { onBack: () => void }) {
 
   const resetGame = () => {
     setPhase("setup");
-    setSelectedTheme(null);
+    setSelectedThemes([]);
     setSecretWord("");
     setImposterIdx(0);
     setWordLog([]);
