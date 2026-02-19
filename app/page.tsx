@@ -9,6 +9,7 @@ import ElectricAvatarPanel from "@/components/ElectricAvatarPanel";
 import Lobby from "@/components/Lobby";
 import Themes, { WORD_DATA } from "@/components/Themes";
 import Game from "@/components/Game";
+import OneDeviceGame from "@/components/OneDeviceGame";
 import SettingsPanel from "@/components/settings";
 
 import { PlayerAvatar } from "@/components/avatars/PlayerAvatar";
@@ -162,6 +163,7 @@ const [myPlayer, setMyPlayer] = useState<Player | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [oneDeviceMode, setOneDeviceMode] = useState(false);
 
   const handleExitLobby = useCallback(async () => {
     if (!inviteCode || !myPlayer) return;
@@ -533,15 +535,19 @@ const handleStartGame = useCallback(async () => {
           )}
 
           {!inviteCode && (
-            <Title data-text="Imposter Game" className={orbitron.className}>
-              Imposter Game
-              <span className="scan" />
-            </Title>
+            <TitleBlock>
+              <Title className={orbitron.className}>
+                IMPOSTER
+              </Title>
+              <TitleTagline>Social deduction at its finest</TitleTagline>
+            </TitleBlock>
           )}
 
 
           {/* ✅ game view */}
-          {isInGame ? (
+          {oneDeviceMode ? (
+  <OneDeviceGame onBack={() => setOneDeviceMode(false)} />
+) : isInGame ? (
   <Game
     inviteCode={inviteCode}
     players={orderedPlayers}
@@ -559,8 +565,7 @@ const handleStartGame = useCallback(async () => {
     onJoinGame={handleJoinGame}
     onCreateGame={handleCreateGame}
     onHyperspeed={(v) => setHyperspeed(v)}
-
-    
+    onOneDevice={() => setOneDeviceMode(true)}
   />
 ) : showThemes ? (
   // ✅ THEMES
@@ -757,76 +762,58 @@ const Star = styled.div<{
   animation-delay: ${({ $delay }) => $delay}s;
 `;
 
-const impostorFlicker = keyframes`
-  0%, 100% { opacity: 1; transform: translateY(0); }
-  50%      { opacity: 0.98; transform: translateY(0.5px); }
-`;
-
-const glitchShift = keyframes`
-  0%   { transform: translate(0,0); opacity: 0; }
-  8%   { transform: translate(0,0); opacity: 0; }
-  10%  { transform: translate(1px,0); opacity: 0.12; }
-  12%  { transform: translate(-1px,0); opacity: 0.10; }
-  14%  { transform: translate(0,0); opacity: 0; }
-  100% { transform: translate(0,0); opacity: 0; }
-`;
-
-const scanSweep = keyframes`
-  0%   { transform: translateY(-120%); opacity: 0; }
-  10%  { opacity: 0.18; }
-  50%  { opacity: 0.12; }
-  100% { transform: translateY(140%); opacity: 0; }
-`;
-
 const bloodPulse = keyframes`
   0%, 100% {
-    filter: drop-shadow(0 2px 10px rgba(0,0,0,0.9))
-            drop-shadow(0 0 18px rgba(220,38,38,0.35))
-            drop-shadow(0 0 34px rgba(220,38,38,0.18));
+    text-shadow:
+      0 0 8px rgba(255, 45, 85, 0.5),
+      0 0 24px rgba(255, 45, 85, 0.25),
+      0 4px 10px rgba(0, 0, 0, 0.8);
   }
   50% {
-    filter: drop-shadow(0 2px 12px rgba(0,0,0,0.95))
-            drop-shadow(0 0 26px rgba(255,45,85,0.55))
-            drop-shadow(0 0 46px rgba(255,45,85,0.26));
+    text-shadow:
+      0 0 14px rgba(255, 45, 85, 0.7),
+      0 0 36px rgba(255, 45, 85, 0.35),
+      0 4px 10px rgba(0, 0, 0, 0.8);
   }
 `;
 
-const shineSweep = keyframes`
-  0%   { transform: translateX(-130%) skewX(-20deg); opacity: 0; }
-  12%  { opacity: 0.0; }
-  22%  { opacity: 0.35; }
-  32%  { opacity: 0.0; }
-  100% { transform: translateX(130%) skewX(-20deg); opacity: 0; }
+const fadeInUp = keyframes`
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const TitleBlock = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 2rem;
+  animation: ${fadeInUp} 0.6s ease-out;
 `;
 
 const Title = styled.h1`
   position: relative;
   text-align: center;
-  margin: 0 0 2rem;
-
-  font-size: 3.6rem;
+  margin: 0;
+  font-size: clamp(3rem, 10vw, 5.5rem);
   font-weight: 900;
-  letter-spacing: 0.03em;
-  line-height: 1.05;
-
-  /* ✅ “imposter red” men fortsatt leslig */
-  color: #ff2d55; /* hot blood */
-  text-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.95),
-    0 0 14px rgba(220, 38, 38, 0.45),
-    0 0 28px rgba(220, 38, 38, 0.22);
-
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: #ff2d55;
   animation: ${bloodPulse} 3.8s ease-in-out infinite;
-
- 
-
- 
-
-  @media (max-width: 768px) {
-    font-size: 2.6rem;
-  }
 `;
 
+const TitleTagline = styled.div`
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.5);
+  letter-spacing: 0.15em;
+  margin-top: 0.75rem;
+  font-style: italic;
+
+  @media (max-width: 768px) {
+    font-size: 0.7rem;
+  }
+`;
 
 const GlowEffect = styled.div`
   position: absolute;
