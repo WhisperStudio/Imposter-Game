@@ -910,18 +910,6 @@ const TitleTagline = styled.div`
   }
 `;
 
-const TitleTagline = styled.div`
-  font-size: 0.9rem;
-  color: rgba(148, 163, 184, 0.5);
-  letter-spacing: 0.15em;
-  margin-top: 0.75rem;
-  font-style: italic;
-
-  @media (max-width: 768px) {
-    font-size: 0.75rem;
-  }
-`;
-
 const GlowEffect = styled.div`
   position: absolute;
   inset: 0;
