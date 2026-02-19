@@ -300,16 +300,10 @@ export default function Lobby({
             <JoinFormCard>
               <JoinFormTitle>Enter Invite Code</JoinFormTitle>
               <JoinFormSub>Ask your host for the 6-character code</JoinFormSub>
-              <CodeInputRow>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <CodeChar key={i} $filled={!!inviteCode[i]}>
-                    {inviteCode[i] || ""}
-                  </CodeChar>
-                ))}
-              </CodeInputRow>
-              <HiddenCodeInput
+              <CodeInput
                 type="text"
                 autoFocus
+                placeholder="ABC123"
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
                 maxLength={6}
@@ -666,34 +660,31 @@ const JoinFormSub = styled.p`
   margin: -0.25rem 0 0.5rem;
 `;
 
-const CodeInputRow = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-`;
-
-const CodeChar = styled.div<{ $filled: boolean }>`
-  width: 42px;
-  height: 52px;
-  border-radius: 10px;
-  border: 2px solid ${({ $filled }) => ($filled ? "rgba(255, 45, 85, 0.5)" : "rgba(255, 255, 255, 0.1)")};
-  background: ${({ $filled }) => ($filled ? "rgba(255, 45, 85, 0.08)" : "rgba(0, 0, 0, 0.2)")};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  font-weight: 800;
+const CodeInput = styled.input`
+  width: 100%;
+  max-width: 260px;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
   color: #e2e8f0;
-  letter-spacing: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
   font-family: monospace;
-  transition: all 0.15s ease;
-`;
+  text-align: center;
+  letter-spacing: 0.5em;
+  outline: none;
+  transition: border-color 0.2s ease;
 
-const HiddenCodeInput = styled.input`
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
+  &::placeholder {
+    color: #475569;
+    letter-spacing: 0.3em;
+    font-weight: 600;
+  }
+
+  &:focus {
+    border-color: rgba(255, 45, 85, 0.5);
+  }
 `;
 
 const JoinFormActions = styled.div`

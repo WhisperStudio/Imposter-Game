@@ -61,7 +61,7 @@ export default function OneDeviceGame({ onBack }: { onBack: () => void }) {
 
   // Theme
   const [activeCatId, setActiveCatId] = useState("nature");
-  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+  const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
 
   // Game state
   const [secretWord, setSecretWord] = useState("");
@@ -102,12 +102,18 @@ export default function OneDeviceGame({ onBack }: { onBack: () => void }) {
     setPlayers((p) => p.map((pl, i) => (i === idx ? { ...pl, name } : pl)));
   }, []);
 
-  const startGame = useCallback(() => {
-    if (!selectedTheme) return;
-    const words = WORD_DATA[selectedTheme];
-    if (!words?.length) return;
+  const toggleTheme = useCallback((themeId: string) => {
+    setSelectedThemes((prev) =>
+      prev.includes(themeId) ? prev.filter((t) => t !== themeId) : [...prev, themeId]
+    );
+  }, []);
 
-    const word = words[Math.floor(Math.random() * words.length)];
+  const startGame = useCallback(() => {
+    if (selectedThemes.length === 0) return;
+    const allWords = selectedThemes.flatMap((t) => WORD_DATA[t] ?? []);
+    if (!allWords.length) return;
+
+    const word = allWords[Math.floor(Math.random() * allWords.length)];
     const impIdx = Math.floor(Math.random() * validPlayers.length);
 
     setSecretWord(word);
@@ -125,7 +131,7 @@ export default function OneDeviceGame({ onBack }: { onBack: () => void }) {
     setWinner(null);
     setEliminatedIdx(-1);
     setPhase("reveal");
-  }, [selectedTheme, validPlayers.length]);
+  }, [selectedThemes, validPlayers.length]);
 
   const handleRevealNext = () => {
     if (currentRevealIdx < validPlayers.length - 1) {
@@ -257,8 +263,8 @@ export default function OneDeviceGame({ onBack }: { onBack: () => void }) {
         <PhaseContainer>
           <PhaseHeader>
             <BackBtn onClick={() => setPhase("setup")}><FaArrowLeft /> Back</BackBtn>
-            <PhaseTitle>Pick a Theme</PhaseTitle>
-            <PhaseSubtitle>Choose a category for the secret word</PhaseSubtitle>
+            <PhaseTitle>Pick Themes</PhaseTitle>
+            <PhaseSubtitle>Select one or more themes for the secret word</PhaseSubtitle>
           </PhaseHeader>
 
           <CatNav>
@@ -277,19 +283,23 @@ export default function OneDeviceGame({ onBack }: { onBack: () => void }) {
             {(activeCat?.items ?? []).filter((t) => WORD_DATA[t]).map((theme) => (
               <ThemeCard
                 key={theme}
-                $selected={selectedTheme === theme}
-                onClick={() => setSelectedTheme(theme)}
+                $selected={selectedThemes.includes(theme)}
+                onClick={() => toggleTheme(theme)}
               >
                 <ThemeEmoji>{ITEM_EMOJIS[theme] ?? "?"}</ThemeEmoji>
                 <ThemeName>{theme}</ThemeName>
-                {selectedTheme === theme && <ThemeCheck><FaCheck /></ThemeCheck>}
+                {selectedThemes.includes(theme) && <ThemeCheck><FaCheck /></ThemeCheck>}
               </ThemeCard>
             ))}
           </ThemeGrid>
 
+          {selectedThemes.length > 0 && (
+            <SelectedCount>{selectedThemes.length} theme{selectedThemes.length > 1 ? 's' : ''} selected</SelectedCount>
+          )}
+
           <ActionBtn
             $variant="primary"
-            disabled={!selectedTheme}
+            disabled={selectedThemes.length === 0}
             onClick={startGame}
           >
             Start Game <FaArrowRight />
@@ -329,7 +339,7 @@ export default function OneDeviceGame({ onBack }: { onBack: () => void }) {
                     </SecretLabel>
                     <SecretValue>
                       {currentRevealIdx === imposterIdx
-                        ? `Theme: ${selectedTheme}`
+                        ? `Theme${selectedThemes.length > 1 ? 's' : ''}: ${selectedThemes.join(', ')}`
                         : secretWord}
                     </SecretValue>
                   </SecretBox>
@@ -757,6 +767,13 @@ const ThemeCheck = styled.div`
   place-items: center;
   font-size: 8px;
   color: #fff;
+`;
+
+const SelectedCount = styled.div`
+  text-align: center;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-top: 0.25rem;
 `;
 
 /* Pass device screen */

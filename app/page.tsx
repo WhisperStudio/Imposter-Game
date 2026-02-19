@@ -536,12 +536,8 @@ const handleStartGame = useCallback(async () => {
 
           {!inviteCode && (
             <TitleBlock>
-              <TitleSub className={orbitron.className}>FIND THE</TitleSub>
-              <Title data-text="IMPOSTER" className={orbitron.className}>
+              <Title className={orbitron.className}>
                 IMPOSTER
-                <TitleGlitch aria-hidden="true" className={orbitron.className}>IMPOSTER</TitleGlitch>
-                <TitleGlitch2 aria-hidden="true" className={orbitron.className}>IMPOSTER</TitleGlitch2>
-                <TitleShine />
               </Title>
               <TitleTagline>Social deduction at its finest</TitleTagline>
             </TitleBlock>
@@ -766,49 +762,23 @@ const Star = styled.div<{
   animation-delay: ${({ $delay }) => $delay}s;
 `;
 
-const glitchAnim1 = keyframes`
-  0%, 100% { clip-path: inset(0 0 0 0); transform: translate(0); }
-  5% { clip-path: inset(20% 0 60% 0); transform: translate(-4px, 2px); }
-  10% { clip-path: inset(0 0 0 0); transform: translate(0); }
-  15% { clip-path: inset(70% 0 5% 0); transform: translate(3px, -1px); }
-  20% { clip-path: inset(0 0 0 0); transform: translate(0); }
-`;
-
-const glitchAnim2 = keyframes`
-  0%, 100% { clip-path: inset(0 0 0 0); transform: translate(0); }
-  5% { clip-path: inset(50% 0 20% 0); transform: translate(4px, -2px); }
-  10% { clip-path: inset(0 0 0 0); transform: translate(0); }
-  15% { clip-path: inset(10% 0 75% 0); transform: translate(-3px, 1px); }
-  20% { clip-path: inset(0 0 0 0); transform: translate(0); }
-`;
-
 const bloodPulse = keyframes`
   0%, 100% {
     text-shadow:
-      0 0 7px rgba(255, 45, 85, 0.4),
-      0 0 20px rgba(255, 45, 85, 0.2),
-      0 0 42px rgba(220, 38, 38, 0.15),
-      0 4px 12px rgba(0, 0, 0, 0.9);
+      0 0 8px rgba(255, 45, 85, 0.5),
+      0 0 24px rgba(255, 45, 85, 0.25),
+      0 4px 10px rgba(0, 0, 0, 0.8);
   }
   50% {
     text-shadow:
-      0 0 10px rgba(255, 45, 85, 0.6),
-      0 0 30px rgba(255, 45, 85, 0.35),
-      0 0 60px rgba(220, 38, 38, 0.25),
-      0 4px 12px rgba(0, 0, 0, 0.9);
+      0 0 14px rgba(255, 45, 85, 0.7),
+      0 0 36px rgba(255, 45, 85, 0.35),
+      0 4px 10px rgba(0, 0, 0, 0.8);
   }
 `;
 
-const shineSweep = keyframes`
-  0%   { transform: translateX(-150%) skewX(-20deg); opacity: 0; }
-  15%  { opacity: 0; }
-  50%  { opacity: 0.25; }
-  85%  { opacity: 0; }
-  100% { transform: translateX(150%) skewX(-20deg); opacity: 0; }
-`;
-
 const fadeInUp = keyframes`
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 `;
 
@@ -818,95 +788,30 @@ const TitleBlock = styled.div`
   align-items: center;
   gap: 0;
   margin-bottom: 2rem;
-  animation: ${fadeInUp} 0.8s ease-out;
-`;
-
-const TitleSub = styled.div`
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.5em;
-  color: rgba(148, 163, 184, 0.7);
-  text-transform: uppercase;
-  margin-bottom: 0.25rem;
-
-  @media (max-width: 768px) {
-    font-size: 0.75rem;
-    letter-spacing: 0.4em;
-  }
+  animation: ${fadeInUp} 0.6s ease-out;
 `;
 
 const Title = styled.h1`
   position: relative;
   text-align: center;
   margin: 0;
-  font-size: clamp(3.5rem, 10vw, 6.5rem);
+  font-size: clamp(3rem, 10vw, 5.5rem);
   font-weight: 900;
   letter-spacing: 0.06em;
   line-height: 1;
-  color: transparent;
-  background: linear-gradient(180deg, #ff2d55 0%, #dc2626 50%, #991b1b 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #ff2d55;
   animation: ${bloodPulse} 3.8s ease-in-out infinite;
-  -webkit-text-stroke: 1px rgba(255, 45, 85, 0.3);
-`;
-
-const TitleGlitch = styled.span`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(180deg, #ff2d55 0%, #dc2626 50%, #991b1b 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: ${glitchAnim1} 4s infinite;
-  opacity: 0.6;
-`;
-
-const TitleGlitch2 = styled.span`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(180deg, #3b82f6 0%, #6366f1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: ${glitchAnim2} 4s infinite 0.05s;
-  opacity: 0.3;
-`;
-
-const TitleShine = styled.span`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.15) 45%,
-    rgba(255, 255, 255, 0.3) 50%,
-    rgba(255, 255, 255, 0.15) 55%,
-    transparent 100%
-  );
-  animation: ${shineSweep} 6s ease-in-out infinite;
-  pointer-events: none;
 `;
 
 const TitleTagline = styled.div`
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: rgba(148, 163, 184, 0.5);
   letter-spacing: 0.15em;
   margin-top: 0.75rem;
   font-style: italic;
 
   @media (max-width: 768px) {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
   }
 `;
 
